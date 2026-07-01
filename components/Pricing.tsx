@@ -1,10 +1,22 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Check, Sparkles } from "./Icons";
+import { useAuth } from "./AuthProvider";
 
 export default function Pricing() {
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annually">("annually");
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handlePlanClick = () => {
+    if (user) {
+      router.push("/dashboard");
+    } else {
+      router.push("/auth/signin");
+    }
+  };
 
   const plans = [
     {
@@ -148,6 +160,7 @@ export default function Pricing() {
 
                 <div className="mt-8">
                   <button
+                    onClick={handlePlanClick}
                     className={`w-full py-3.5 px-6 rounded-2xl font-semibold text-sm transition-all duration-300 cursor-pointer ${
                       plan.isPopular
                         ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-[0_4px_20px_rgba(168,85,247,0.3)]"

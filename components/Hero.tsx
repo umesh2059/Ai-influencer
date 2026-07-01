@@ -1,7 +1,22 @@
+"use client";
+
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Sparkles, Play, ArrowRight, Instagram, TikTok, YouTube, Twitter, Zap, Cpu } from "./Icons";
+import { useAuth } from "./AuthProvider";
 
 export default function Hero() {
+  const { user } = useAuth();
+  const router = useRouter();
+
+  const handleGetStarted = () => {
+    if (user) {
+      router.push("/dashboard");
+    } else {
+      router.push("/auth/signin");
+    }
+  };
+
   return (
     <section className="relative pt-36 pb-20 overflow-hidden bg-grid-pattern">
       {/* Dynamic ambient background glow circles */}
@@ -37,13 +52,13 @@ export default function Hero() {
 
         {/* CTAs */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-          <a
-            href="#demo"
+          <button
+            onClick={handleGetStarted}
             className="w-full sm:w-auto py-4 px-8 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold shadow-[0_4px_25px_rgba(168,85,247,0.35)] hover:scale-[1.02] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"
           >
             Start Generating Free
             <ArrowRight size={16} />
-          </a>
+          </button>
           <a
             href="#scheduler"
             className="w-full sm:w-auto py-4 px-8 rounded-2xl glass-panel text-slate-300 hover:text-white border-slate-800 hover:border-slate-700 hover:scale-[1.02] transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer"

@@ -1,11 +1,15 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Sparkles, Menu, Close } from "./Icons";
+import { useAuth } from "./AuthProvider";
 
 export default function Header() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { user, loading, signOut } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -22,6 +26,23 @@ export default function Header() {
     { label: "Pricing Plans", href: "#pricing" },
     { label: "FAQ", href: "#faq" }
   ];
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/");
+  };
+
+  const handleSignIn = () => {
+    router.push("/auth/signin");
+  };
+
+  const handleGetStarted = () => {
+    if (user) {
+      router.push("/dashboard");
+    } else {
+      router.push("/auth/signin");
+    }
+  };
 
   return (
     <header
@@ -57,15 +78,47 @@ export default function Header() {
 
         {/* Desktop CTA */}
         <div className="hidden md:flex items-center gap-4">
-          <a href="#login" className="text-sm font-semibold text-slate-300 hover:text-white transition-colors duration-200 cursor-pointer">
-            Sign In
-          </a>
-          <a
-            href="#demo"
-            className="py-2.5 px-5 rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-semibold text-white transition-all duration-300 shadow-md shadow-purple-600/25 hover:shadow-purple-500/40 cursor-pointer"
-          >
-            Start Free
-          </a>
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin" />
+          ) : user ? (
+            <>
+              {/* User info */}
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="flex items-center gap-2 text-sm font-semibold text-slate-300 hover:text-white transition-colors duration-200 cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
+                  {(
+                    user.user_metadata?.full_name?.[0] ||
+                    user.email?.[0] ||
+                    "U"
+                  ).toUpperCase()}
+                </div>
+                <span className="hidden lg:inline">Dashboard</span>
+              </button>
+              <button
+                onClick={handleSignOut}
+                className="py-2.5 px-5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-sm font-semibold text-slate-300 hover:text-white transition-all duration-300 cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={handleSignIn}
+                className="text-sm font-semibold text-slate-300 hover:text-white transition-colors duration-200 cursor-pointer"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={handleGetStarted}
+                className="py-2.5 px-5 rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-semibold text-white transition-all duration-300 shadow-md shadow-purple-600/25 hover:shadow-purple-500/40 cursor-pointer"
+              >
+                Start Free
+              </button>
+            </>
+          )}
         </div>
 
         {/* Mobile menu trigger */}
@@ -91,20 +144,49 @@ export default function Header() {
             </a>
           ))}
           <div className="flex flex-col gap-3 pt-2">
-            <a
-              href="#login"
-              onClick={() => setMobileMenuOpen(false)}
-              className="py-3 text-center rounded-xl border border-slate-800 text-sm font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
-            >
-              Sign In
-            </a>
-            <a
-              href="#demo"
-              onClick={() => setMobileMenuOpen(false)}
-              className="py-3 text-center rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-semibold text-white transition-colors"
-            >
-              Start Free
-            </a>
+            {user ? (
+              <>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    router.push("/dashboard");
+                  }}
+                  className="py-3 text-center rounded-xl border border-slate-800 text-sm font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleSignOut();
+                  }}
+                  className="py-3 text-center rounded-xl bg-slate-900 border border-slate-800 text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                >
+                  Sign Out
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleSignIn();
+                  }}
+                  className="py-3 text-center rounded-xl border border-slate-800 text-sm font-semibold text-slate-300 hover:text-white hover:border-slate-700 transition-colors cursor-pointer"
+                >
+                  Sign In
+                </button>
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    handleGetStarted();
+                  }}
+                  className="py-3 text-center rounded-xl bg-purple-600 hover:bg-purple-500 text-sm font-semibold text-white transition-colors cursor-pointer"
+                >
+                  Start Free
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
