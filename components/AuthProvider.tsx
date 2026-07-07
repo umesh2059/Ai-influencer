@@ -66,6 +66,9 @@ export default function AuthProvider({
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
+    }).catch((err) => {
+      console.error("Supabase getSession error:", err);
+      setLoading(false);
     });
 
     // Listen for auth state changes
