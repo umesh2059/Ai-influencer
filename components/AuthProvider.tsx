@@ -26,26 +26,49 @@ export const useAuth = () => useContext(AuthContext);
  * This avoids the need for Supabase webhooks.
  */
 async function upsertProfile(user: User) {
-  const supabase = createClient();
-  const { error } = await supabase.from("profiles").upsert(
-    {
-      id: user.id,
-      email: user.email,
-      full_name:
-        user.user_metadata?.full_name ||
-        user.user_metadata?.name ||
-        null,
-      avatar_url:
-        user.user_metadata?.avatar_url ||
-        user.user_metadata?.picture ||
-        null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" }
-  );
+  try {
+    const supabase = createClient();
+    const { error } = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        email: user.email,
+        full_name:
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          null,
+        avatar_url:
+          user.user_metadata?.avatar_url ||
+          user.user_metadata?.picture ||
+          null,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" }
+    );
 
-  if (error) {
-    console.error("Error upserting profile:", error.message);
+    if (error) {
+      console.error("Error upserting profile:", error.message);
+    } else {
+      // Safely initialize credits if not set (does not crash if credits column is missing)
+      try {
+        const { data, error: selectError } = await supabase
+          .from("profiles")
+          .select("credits")
+          .eq("id", user.id)
+          .single();
+        
+        if (!selectError && data && (data.credits === null || data.credits === undefined)) {
+          await supabase
+            .from("profiles")
+            .update({ credits: 300 })
+            .eq("id", user.id);
+        }
+      } catch (creditsErr) {
+        // Silently catch error if credits column doesn't exist
+        console.log("Credits column not available yet in database.");
+      }
+    }
+  } catch (err) {
+    console.error("Exception in upsertProfile:", err);
   }
 }
 
@@ -75,16 +98,21 @@ export default function AuthProvider({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
+      try {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
 
-      // When a user signs up or signs in for the first time, save their profile
-      if (
-        (event === "SIGNED_IN" || event === "USER_UPDATED") &&
-        session?.user
-      ) {
-        await upsertProfile(session.user);
+        // When a user signs up or signs in for the first time, save their profile
+        if (
+          (event === "SIGNED_IN" || event === "USER_UPDATED") &&
+          session?.user
+        ) {
+          await upsertProfile(session.user);
+        }
+      } catch (err) {
+        console.error("Error in onAuthStateChange handler:", err);
+        setLoading(false);
       }
     });
 
@@ -94,10 +122,15 @@ export default function AuthProvider({
   }, []);
 
   const signOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
+    try {
+      const supabase = createClient();
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Supabase signOut error:", e);
+    } finally {
+      setUser(null);
+      setSession(null);
+    }
   };
 
   return (

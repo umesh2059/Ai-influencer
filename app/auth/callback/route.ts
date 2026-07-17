@@ -32,6 +32,16 @@ export async function GET(request: Request) {
             data.user.user_metadata?.picture ||
             null,
         });
+
+        // Safely set default credits of 300
+        try {
+          await supabase
+            .from("profiles")
+            .update({ credits: 300 })
+            .eq("id", data.user.id);
+        } catch (e) {
+          // Column may not exist
+        }
       }
 
       const forwardedHost = request.headers.get("x-forwarded-host");

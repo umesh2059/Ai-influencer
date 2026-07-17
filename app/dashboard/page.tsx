@@ -25,11 +25,63 @@ import {
 import InteractiveInfluencerGenerator from "@/components/InteractiveInfluencerGenerator";
 import PostSchedulerSimulator from "@/components/PostSchedulerSimulator";
 
+const INFLUENCER_PRESETS: Record<string, { portraits: string[], fullBodies: string[] }> = {
+  Female: {
+    portraits: [
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=600&h=600&q=80"
+    ],
+    fullBodies: [
+      "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1485462537746-965f33f7f6a7?auto=format&fit=crop&w=600&h=900&q=80"
+    ]
+  },
+  Male: {
+    portraits: [
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&w=600&h=600&q=80"
+    ],
+    fullBodies: [
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1617137968427-85924c800a22?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1618886614638-80e3c103d31a?auto=format&fit=crop&w=600&h=900&q=80"
+    ]
+  },
+  "Non-Binary": {
+    portraits: [
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&h=600&q=80"
+    ],
+    fullBodies: [
+      "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=600&h=900&q=80"
+    ]
+  },
+  Custom: {
+    portraits: [
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&h=600&q=80",
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&h=600&q=80"
+    ],
+    fullBodies: [
+      "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&h=900&q=80",
+      "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=600&h=900&q=80"
+    ]
+  }
+};
+
 interface Profile {
   id: string;
   email: string;
   full_name: string | null;
   avatar_url: string | null;
+  credits: number;
   created_at: string;
 }
 
@@ -49,6 +101,84 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const router = useRouter();
+
+  // Studio View State
+  const [studioView, setStudioView] = useState<"landing" | "create-model" | "create-post">("landing");
+  
+  // Models State
+  const [modelsList, setModelsList] = useState<any[]>([
+    {
+      id: "aria-sterling",
+      name: "Aria Sterling",
+      gender: "Female",
+      bodyType: "Slim",
+      skinTone: "Fair",
+      ageRange: "Gen Z (18-24)",
+      hairStyle: "Long locks",
+      eyeColor: "Blue",
+      avatarUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&h=400&q=80",
+      niche: "Fashion",
+      style: "Photorealistic",
+      followers: "342.8K",
+      posts: "148",
+      engagement: "6.8%",
+    },
+    {
+      id: "v3ra",
+      name: "V3RA",
+      gender: "Female",
+      bodyType: "Athletic",
+      skinTone: "Medium",
+      ageRange: "Gen Z (18-24)",
+      hairStyle: "Short crop",
+      eyeColor: "Green",
+      avatarUrl: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=400&h=400&q=80",
+      niche: "Fashion",
+      style: "Cyberpunk",
+      followers: "189.4K",
+      posts: "92",
+      engagement: "8.4%",
+    }
+  ]);
+
+  // Generated Posts State
+  const [postsList, setPostsList] = useState<any[]>([
+    {
+      id: "post-1",
+      modelName: "Aria Sterling",
+      caption: "Golden hour in Virtual Milan. Wearing custom digital silk that adapts to the light. 👗🌅 #digitalfashion #metaverse",
+      platform: "Instagram",
+      imageUrl: "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?auto=format&fit=crop&w=600&h=800&q=80",
+      createdAt: "2 hours ago",
+      status: "Published",
+    },
+    {
+      id: "post-2",
+      modelName: "V3RA",
+      caption: "Chasing neon drops in Shibuya. Cyberpunk grids are ready. 🛸🦾 #cyberpunk #streetstyle",
+      platform: "TikTok",
+      imageUrl: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=600&h=800&q=80",
+      createdAt: "1 day ago",
+      status: "Published",
+    }
+  ]);
+
+  // Model creation form states
+  const [newModelName, setNewModelName] = useState("");
+  const [newModelGender, setNewModelGender] = useState("Female");
+  const [newModelBodyType, setNewModelBodyType] = useState("Average");
+  const [newModelSkinTone, setNewModelSkinTone] = useState("Medium");
+  const [newModelAgeRange, setNewModelAgeRange] = useState("Gen Z (18-24)");
+  const [newModelHairStyle, setNewModelHairStyle] = useState("Straight");
+  const [newModelEyeColor, setNewModelEyeColor] = useState("Brown");
+  const [formError, setFormError] = useState("");
+
+  // Model generation preview states
+  const [isGeneratingModel, setIsGeneratingModel] = useState(false);
+  const [generationModelStep, setGenerationModelStep] = useState(0);
+  const [generatedPortrait, setGeneratedPortrait] = useState("");
+  const [generatedFullBody, setGeneratedFullBody] = useState("");
+  const [hasGenerated, setHasGenerated] = useState(false);
 
   // Social account connection statuses (simulated state)
   const [connectedAccounts, setConnectedAccounts] = useState({
@@ -87,7 +217,10 @@ export default function DashboardPage() {
         .single();
 
       if (!error && data) {
-        setProfile(data);
+        setProfile({
+          ...data,
+          credits: data.credits !== null && data.credits !== undefined ? data.credits : 300
+        });
         setSettingsName(data.full_name || "");
         setSettingsEmail(data.email || user!.email || "");
       } else {
@@ -96,16 +229,98 @@ export default function DashboardPage() {
         }
         if (user) {
           setSettingsEmail(user.email || "");
+          setProfile({
+            id: user.id,
+            email: user.email || "",
+            full_name: user.user_metadata?.full_name || null,
+            avatar_url: user.user_metadata?.avatar_url || null,
+            created_at: new Date().toISOString(),
+            credits: 300
+          });
         }
       }
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
       if (user) {
         setSettingsEmail(user.email || "");
+        setProfile({
+          id: user.id,
+          email: user.email || "",
+          full_name: user.user_metadata?.full_name || null,
+          avatar_url: user.user_metadata?.avatar_url || null,
+          created_at: new Date().toISOString(),
+          credits: 300
+        });
       }
     } finally {
       setProfileLoading(false);
     }
+  };
+
+  const deductCredits = async (amount: number) => {
+    const currentCredits = profile?.credits ?? 300;
+    const newCredits = Math.max(0, currentCredits - amount);
+    
+    if (profile) {
+      setProfile({ ...profile, credits: newCredits });
+    } else {
+      setProfile({
+        id: user?.id || "",
+        email: user?.email || "",
+        full_name: user?.user_metadata?.full_name || null,
+        avatar_url: null,
+        created_at: new Date().toISOString(),
+        credits: newCredits
+      });
+    }
+
+    try {
+      const supabase = createClient();
+      await supabase
+        .from("profiles")
+        .update({ credits: newCredits })
+        .eq("id", user!.id);
+    } catch (err) {
+      console.error("Failed to update credits in database:", err);
+    }
+  };
+
+  const handleGenerateModel = async () => {
+    if (!newModelName.trim()) {
+      setFormError("Please enter a valid influencer name.");
+      return;
+    }
+    
+    const userCredits = profile?.credits ?? 300;
+    if (userCredits < 50) {
+      setFormError("Insufficient credits. You need at least 50 credits to generate a model.");
+      return;
+    }
+
+    setFormError("");
+    setIsGeneratingModel(true);
+    setHasGenerated(false);
+    setGenerationModelStep(0);
+
+    // Simulate step progress
+    for (let i = 0; i < 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setGenerationModelStep(i);
+    }
+
+    const genderKey = (newModelGender === "Female" || newModelGender === "Male" || newModelGender === "Non-Binary")
+      ? newModelGender
+      : "Custom";
+
+    const presets = INFLUENCER_PRESETS[genderKey] || INFLUENCER_PRESETS.Custom;
+    const randomPortrait = presets.portraits[Math.floor(Math.random() * presets.portraits.length)];
+    const randomFullBody = presets.fullBodies[Math.floor(Math.random() * presets.fullBodies.length)];
+
+    setGeneratedPortrait(randomPortrait);
+    setGeneratedFullBody(randomFullBody);
+    await deductCredits(50);
+    setHasGenerated(true);
+    setIsGeneratingModel(false);
   };
 
   const handleSignOut = async () => {
@@ -133,10 +348,49 @@ export default function DashboardPage() {
     setIsSavingSettings(false);
   };
 
+  const [showResetButton, setShowResetButton] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (authLoading || profileLoading) {
+        setShowResetButton(true);
+      }
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [authLoading, profileLoading]);
+
+  const handleClearSession = () => {
+    try {
+      localStorage.clear();
+      // Clear cookies
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+      window.location.href = "/";
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   if (authLoading || profileLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#030014]">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#030014] text-center px-4">
+        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mb-4" />
+        {showResetButton && (
+          <div className="animate-fadeIn space-y-3 max-w-sm">
+            <p className="text-sm text-slate-400">
+              Taking longer than expected? An invalid session from a previous project might be active in your browser cache.
+            </p>
+            <button
+              onClick={handleClearSession}
+              className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs font-semibold text-purple-400 hover:text-white hover:border-slate-700 transition-all duration-300 cursor-pointer"
+            >
+              Reset Session Cache & Reload
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -458,16 +712,601 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "studio" && (
-          <div className="max-w-6xl mx-auto space-y-6 animate-fadeIn">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">AI Model Studio</h1>
-              <p className="text-slate-400 text-sm">
-                Generate high-fidelity photorealistic, cyberpunk, and 3D anime influencer personas.
-              </p>
-            </div>
-            <div className="glass-panel border border-slate-900/80 rounded-3xl overflow-hidden shadow-2xl">
-              <InteractiveInfluencerGenerator />
-            </div>
+          <div className="max-w-6xl mx-auto space-y-8 animate-fadeIn">
+            {studioView === "landing" && (
+              <div className="space-y-8">
+                {/* Header with credits */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h1 className="text-3xl font-extrabold tracking-tight font-sans">AI Model Studio</h1>
+                    <p className="text-slate-400 text-sm mt-1">
+                      Manage your custom artificial personas and generate rich content for social channels.
+                    </p>
+                  </div>
+                  {/* Credits Badge */}
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-purple-500/15 to-pink-500/10 border border-purple-500/20 text-purple-400 font-bold text-sm shadow-md shadow-purple-950/30">
+                    <span className="animate-pulse text-purple-400 text-base">✨</span>
+                    <span>{profile?.credits ?? 300} Credits</span>
+                  </div>
+                </div>
+
+                {/* Two Option Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Option 1: Add New Model */}
+                  <div
+                    onClick={() => setStudioView("create-model")}
+                    className="group bg-slate-950/40 border border-slate-900/80 hover:border-purple-500/50 hover:bg-slate-950/60 rounded-3xl p-6 transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[220px]"
+                  >
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl group-hover:bg-purple-600/15 transition-all duration-300" />
+                    <div className="space-y-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30">
+                        {/* User Plus SVG Icon */}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                          <line x1="19" x2="19" y1="8" y2="14" />
+                          <line x1="22" x2="16" y1="11" y2="11" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-white group-hover:text-purple-400 transition-colors">Add New Model</h3>
+                        <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                          Define a brand new AI influencer identity. Configure their name, gender, body type, age range, hair, and eye color.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-purple-400 group-hover:text-purple-300">
+                      Configure Model <ArrowRight size={14} />
+                    </div>
+                  </div>
+
+                  {/* Option 2: Create a Post */}
+                  <div
+                    onClick={() => setStudioView("create-post")}
+                    className="group bg-slate-950/40 border border-slate-900/80 hover:border-pink-500/50 hover:bg-slate-950/60 rounded-3xl p-6 transition-all duration-300 cursor-pointer relative overflow-hidden flex flex-col justify-between min-h-[220px]"
+                  >
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-pink-600/10 rounded-full blur-2xl group-hover:bg-pink-600/15 transition-all duration-300" />
+                    <div className="space-y-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-pink-600 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-pink-600/30">
+                        {/* Plus Circle Image SVG Icon */}
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                          <circle cx="9" cy="9" r="2" />
+                          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-white group-hover:text-pink-400 transition-colors">Create a Post</h3>
+                        <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+                          Synthesize fresh visual content and write engaging, target-optimized captions for your virtual models.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex items-center gap-1 text-xs font-semibold text-pink-400 group-hover:text-pink-300">
+                      Open Post Generator <ArrowRight size={14} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Below sections: Model list & Post generated */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Left Column: Model List Directory */}
+                  <div className="lg:col-span-2 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h2 className="text-lg font-bold text-white">Active Personas Directory</h2>
+                        <p className="text-slate-500 text-xs">Total models available for generation: {modelsList.length}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {modelsList.map((model) => (
+                        <div
+                          key={model.id}
+                          className="bg-slate-950/30 border border-slate-900 rounded-2xl p-5 hover:border-slate-800 transition-all duration-300 flex flex-col justify-between space-y-4 relative group"
+                        >
+                          <div className="flex items-start gap-4">
+                            {model.avatarUrl ? (
+                              <img
+                                src={model.avatarUrl}
+                                alt={model.name}
+                                className="w-14 h-14 rounded-2xl object-cover border border-slate-800 shadow-md shadow-black/40"
+                              />
+                            ) : (
+                              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-white text-lg font-bold border border-slate-800">
+                                {model.name[0]}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <h3 className="font-bold text-base text-white truncate">{model.name}</h3>
+                              <p className="text-xs text-purple-400 font-medium">
+                                {model.niche || "Fashion"} | {model.style || "Photorealistic"}
+                              </p>
+                              {model.followers && (
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                  {model.followers} followers • {model.engagement} engagement
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5 pt-2 border-t border-slate-900/60">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Gender: {model.gender}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Body: {model.bodyType}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Skin: {model.skinTone}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Age: {model.ageRange}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Hair: {model.hairStyle}
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800/60">
+                              Eye: {model.eyeColor}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right Column: Generated Posts */}
+                  <div className="space-y-4">
+                    <div>
+                      <h2 className="text-lg font-bold text-white">Latest Generated Content</h2>
+                      <p className="text-slate-500 text-xs">Simulated and active social feeds</p>
+                    </div>
+
+                    <div className="space-y-4">
+                      {postsList.map((post) => (
+                        <div
+                          key={post.id}
+                          className="bg-slate-950/30 border border-slate-900 rounded-2xl overflow-hidden hover:border-slate-800 transition-all duration-300"
+                        >
+                          <div className="aspect-video w-full relative">
+                            <img src={post.imageUrl} alt="Post content" className="w-full h-full object-cover" />
+                            <span className="absolute top-3 left-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-purple-400 border border-purple-500/20">
+                              {post.modelName}
+                            </span>
+                            <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white">
+                              {post.platform}
+                            </span>
+                          </div>
+                          <div className="p-4 space-y-2">
+                            <p className="text-xs text-slate-300 line-clamp-2 leading-relaxed">{post.caption}</p>
+                            <div className="flex justify-between items-center pt-2 text-[10px] text-slate-500 border-t border-slate-900/50">
+                              <span>{post.createdAt}</span>
+                              <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                                <Check size={10} /> {post.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {studioView === "create-model" && (
+              <div className="space-y-6">
+                {/* Breadcrumb / Back button */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => {
+                      setStudioView("landing");
+                      setFormError("");
+                      setHasGenerated(false);
+                      setGeneratedPortrait("");
+                      setGeneratedFullBody("");
+                    }}
+                    className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer font-medium"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="19" x2="5" y1="12" y2="12" />
+                      <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    Back to Studio Hub
+                  </button>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-purple-400 font-bold bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
+                      Cost: 50 Credits
+                    </span>
+                    <span className="text-xs text-slate-500 font-medium">Balance: {profile?.credits ?? 300} Credits</span>
+                  </div>
+                </div>
+
+                {/* Split layout: Options on left, Preview on right (Dribbble UX) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                  {/* Left Column: Properties custom tiles (8 cols) */}
+                  <div className="lg:col-span-7 bg-slate-950/40 border border-slate-900/85 rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl relative overflow-hidden">
+                    <div>
+                      <h2 className="text-xl font-bold text-white">Configure Persona Attributes</h2>
+                      <p className="text-slate-400 text-xs mt-1">Select visual attributes to formulate consistent influencer portraits and postures.</p>
+                    </div>
+
+                    {formError && (
+                      <div className="p-4 rounded-xl bg-red-950/30 border border-red-500/20 text-red-400 text-xs animate-shake">
+                        {formError}
+                      </div>
+                    )}
+
+                    <div className="space-y-6">
+                      {/* Name input */}
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Influencer Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Mia Woods"
+                          value={newModelName}
+                          onChange={(e) => setNewModelName(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500/50 transition-colors"
+                        />
+                      </div>
+
+                      {/* Gender Selector Chips */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Gender Selection</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          {[
+                            { value: "Female", label: "👩 Female", style: "border-pink-500/20 hover:border-pink-500/40 selected:bg-pink-500/20 active-ring:ring-pink-500/50" },
+                            { value: "Male", label: "👨 Male", style: "border-blue-500/20 hover:border-blue-500/40 selected:bg-blue-500/20 active-ring:ring-blue-500/50" },
+                            { value: "Non-Binary", label: "🧑 Non-Binary", style: "border-purple-500/20 hover:border-purple-500/40 selected:bg-purple-500/20 active-ring:ring-purple-500/50" },
+                            { value: "Custom", label: "🌈 Custom", style: "border-amber-500/20 hover:border-amber-500/40 selected:bg-amber-500/20 active-ring:ring-amber-500/50" },
+                          ].map((gender) => {
+                            const isSel = newModelGender === gender.value;
+                            return (
+                              <button
+                                key={gender.value}
+                                onClick={() => setNewModelGender(gender.value)}
+                                className={`px-4 py-3 rounded-xl border text-xs font-bold transition-all duration-300 cursor-pointer text-center ${
+                                  isSel
+                                    ? "bg-gradient-to-b from-purple-900/30 to-purple-600/10 border-purple-500 shadow-lg shadow-purple-950/20 text-white"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white"
+                                }`}
+                              >
+                                {gender.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Body Type Selection Chips */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Body Anatomy</label>
+                        <div className="flex flex-wrap gap-2.5">
+                          {[
+                            { value: "Slim", label: "⏳ Slim" },
+                            { value: "Athletic", label: "⚡ Athletic" },
+                            { value: "Curvy", label: "🍑 Curvy" },
+                            { value: "Muscular", label: "💪 Muscular" },
+                            { value: "Average", label: "🧍 Average" },
+                          ].map((b) => {
+                            const isSel = newModelBodyType === b.value;
+                            return (
+                              <button
+                                key={b.value}
+                                onClick={() => setNewModelBodyType(b.value)}
+                                className={`px-3.5 py-2 rounded-xl border text-xs font-semibold transition-all duration-300 cursor-pointer ${
+                                  isSel
+                                    ? "bg-purple-500/10 border-purple-500 text-white shadow-md"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:border-slate-800"
+                                }`}
+                              >
+                                {b.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Skin Tone Selection Chips */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Skin Tone & Complexion</label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { value: "Fair", label: "🏻 Fair" },
+                            { value: "Light", label: "🏼 Light" },
+                            { value: "Medium", label: "🏽 Medium" },
+                            { value: "Olive", label: "🏾 Olive" },
+                            { value: "Dark", label: "🏿 Dark" },
+                            { value: "Deep Dark", label: "🏿 Deep Dark" },
+                          ].map((skin) => {
+                            const isSel = newModelSkinTone === skin.value;
+                            return (
+                              <button
+                                key={skin.value}
+                                onClick={() => setNewModelSkinTone(skin.value)}
+                                className={`px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-300 cursor-pointer flex items-center gap-1.5 ${
+                                  isSel
+                                    ? "bg-purple-500/10 border-purple-500 text-white"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:border-slate-800"
+                                }`}
+                              >
+                                <span>{skin.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Age Range Chips */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Age Range</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[
+                            { value: "Gen Z (18-24)", label: "🎒 Gen Z (18-24)" },
+                            { value: "Millennial (25-34)", label: "💼 Millennial (25-34)" },
+                            { value: "Mid-Career (35-44)", label: "👔 Mid-Career (35-44)" },
+                            { value: "Mature (45+)", label: "🕶️ Mature (45+)" },
+                          ].map((age) => {
+                            const isSel = newModelAgeRange === age.value;
+                            return (
+                              <button
+                                key={age.value}
+                                onClick={() => setNewModelAgeRange(age.value)}
+                                className={`px-4 py-3 rounded-xl border text-xs font-semibold transition-all duration-300 cursor-pointer text-left ${
+                                  isSel
+                                    ? "bg-purple-500/10 border-purple-500 text-white"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:border-slate-800"
+                                }`}
+                              >
+                                {age.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Hair Style Selector */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Hair Style</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {[
+                            { value: "Straight", label: "👩 Straight" },
+                            { value: "Wavy", label: "👩‍🦱 Wavy" },
+                            { value: "Curly", label: "👩‍🦱 Curly" },
+                            { value: "Coily", label: "👩‍🦱 Coily" },
+                            { value: "Pixie", label: "💇‍♀️ Pixie" },
+                            { value: "Short crop", label: "💇‍♂️ Short" },
+                            { value: "Long locks", label: "👱‍♀️ Long locks" },
+                            { value: "Braids", label: "👩‍🦱 Braids" },
+                            { value: "Bald", label: "👨‍🦲 Bald" },
+                          ].map((h) => {
+                            const isSel = newModelHairStyle === h.value;
+                            return (
+                              <button
+                                key={h.value}
+                                onClick={() => setNewModelHairStyle(h.value)}
+                                className={`px-3 py-2.5 rounded-xl border text-[11px] font-semibold transition-all duration-300 cursor-pointer text-center truncate ${
+                                  isSel
+                                    ? "bg-purple-500/10 border-purple-500 text-white"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:border-slate-800"
+                                }`}
+                              >
+                                {h.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Eye Color */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Eye Color</label>
+                        <div className="flex flex-wrap gap-2.5">
+                          {[
+                            { value: "Blue", label: "🔵 Blue" },
+                            { value: "Green", label: "🟢 Green" },
+                            { value: "Brown", label: "🟤 Brown" },
+                            { value: "Hazel", label: "🟡 Hazel" },
+                            { value: "Gray", label: "⚪ Gray" },
+                            { value: "Amber", label: "🟠 Amber" },
+                          ].map((eye) => {
+                            const isSel = newModelEyeColor === eye.value;
+                            return (
+                              <button
+                                key={eye.value}
+                                onClick={() => setNewModelEyeColor(eye.value)}
+                                className={`px-3.5 py-2.5 rounded-xl border text-xs font-semibold transition-all duration-300 cursor-pointer ${
+                                  isSel
+                                    ? "bg-purple-500/10 border-purple-500 text-white"
+                                    : "bg-slate-950/40 border-slate-900 text-slate-400 hover:text-white hover:border-slate-800"
+                                }`}
+                              >
+                                {eye.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-4 border-t border-slate-900/80 flex justify-end">
+                      <button
+                        onClick={handleGenerateModel}
+                        disabled={isGeneratingModel}
+                        className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 text-sm font-semibold text-white shadow-lg shadow-purple-600/20 hover:shadow-purple-600/35 cursor-pointer flex items-center gap-2"
+                      >
+                        <Sparkles size={16} /> Generate Model (-50 Credits)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Visual Preview Panel (5 cols) */}
+                  <div className="lg:col-span-5 flex flex-col justify-stretch">
+                    <div className="flex-1 bg-slate-950/40 border border-slate-900/85 rounded-3xl p-6 shadow-2xl flex flex-col items-center justify-center min-h-[400px] relative overflow-hidden">
+                      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-purple-600/5 via-transparent to-pink-600/5 pointer-events-none" />
+
+                      {isGeneratingModel ? (
+                        /* Simulated step generation screen */
+                        <div className="space-y-6 text-center max-w-xs z-10">
+                          <div className="relative w-20 h-20 mx-auto">
+                            {/* Outer animated spinner */}
+                            <div className="absolute inset-0 rounded-full border-2 border-purple-500/10 border-t-purple-500 animate-spin" />
+                            {/* Inner pulse */}
+                            <div className="absolute inset-2 rounded-full bg-purple-500/10 flex items-center justify-center animate-pulse">
+                              <Sparkles size={24} className="text-purple-400" />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <h4 className="font-bold text-white text-base">Synthesizing Persona</h4>
+                            <p className="text-xs text-purple-400 font-semibold h-4 transition-all duration-300">
+                              {[
+                                "Formulating facial topology mapping...",
+                                "Calibrating diffuse and specular lighting...",
+                                "Synthesizing skin shaders & pigmentation...",
+                                "Constructing posture & matching viewport...",
+                                "Finalizing high-fidelity rendering..."
+                              ][generationModelStep]}
+                            </p>
+                          </div>
+                          {/* Progress bar */}
+                          <div className="w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-300"
+                              style={{ width: `${(generationModelStep + 1) * 20}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : hasGenerated ? (
+                        /* Side-by-side Dribbble preview screen */
+                        <div className="w-full space-y-6 z-10 animate-scaleUp">
+                          <div>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-full border border-purple-500/20">
+                              Generation Success
+                            </span>
+                            <h3 className="text-lg font-black text-white mt-2.5">{newModelName || "Generated Model"}</h3>
+                            <p className="text-slate-500 text-xs mt-0.5">{newModelGender} | {newModelAgeRange}</p>
+                          </div>
+
+                          {/* Dual image preview */}
+                          <div className="grid grid-cols-2 gap-4">
+                            {/* Portrait Face image */}
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-slate-400 block text-center uppercase tracking-wider">Portrait Face</span>
+                              <div className="aspect-[4/5] rounded-2xl overflow-hidden border border-purple-500/25 relative group shadow-lg shadow-black/60">
+                                <img src={generatedPortrait} alt="Portrait Face preview" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center p-3">
+                                  <span className="text-[10px] text-white font-medium">Consistent Face mesh</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Full body image */}
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold text-slate-400 block text-center uppercase tracking-wider">Full Body Pose</span>
+                              <div className="aspect-[4/5] rounded-2xl overflow-hidden border border-pink-500/25 relative group shadow-lg shadow-black/60">
+                                <img src={generatedFullBody} alt="Full body pose preview" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center p-3">
+                                  <span className="text-[10px] text-white font-medium">Consistent Body rigging</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Quick details tags summary */}
+                          <div className="bg-slate-950/60 rounded-xl p-3.5 border border-slate-900 space-y-1 text-slate-400 text-xs">
+                            <div className="flex justify-between"><span className="text-slate-500">Gender:</span> <span className="text-slate-300 font-bold">{newModelGender}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">Body Type:</span> <span className="text-slate-300 font-bold">{newModelBodyType}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">Skin Tone:</span> <span className="text-slate-300 font-bold">{newModelSkinTone}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">Hair Style:</span> <span className="text-slate-300 font-bold">{newModelHairStyle}</span></div>
+                            <div className="flex justify-between"><span className="text-slate-500">Eye Color:</span> <span className="text-slate-300 font-bold">{newModelEyeColor}</span></div>
+                          </div>
+
+                          {/* Roster save buttons */}
+                          <div className="flex gap-3">
+                            <button
+                              onClick={() => {
+                                const newModel = {
+                                  id: `model-${Date.now()}`,
+                                  name: newModelName,
+                                  gender: newModelGender,
+                                  bodyType: newModelBodyType,
+                                  skinTone: newModelSkinTone,
+                                  ageRange: newModelAgeRange,
+                                  hairStyle: newModelHairStyle,
+                                  eyeColor: newModelEyeColor,
+                                  avatarUrl: generatedPortrait,
+                                  niche: "Fashion",
+                                  style: "Photorealistic",
+                                  followers: "0",
+                                  posts: "0",
+                                  engagement: "0.0%",
+                                };
+
+                                setModelsList([newModel, ...modelsList]);
+                                setNewModelName("");
+                                setStudioView("landing");
+                                setHasGenerated(false);
+                                setGeneratedPortrait("");
+                                setGeneratedFullBody("");
+                              }}
+                              className="flex-1 py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-[0.98] transition-all duration-300 text-xs font-bold text-white shadow-lg shadow-purple-600/25 cursor-pointer text-center"
+                            >
+                              Add to Active Directory
+                            </button>
+                            <button
+                              onClick={() => {
+                                setHasGenerated(false);
+                                setGeneratedPortrait("");
+                                setGeneratedFullBody("");
+                              }}
+                              className="py-3.5 px-4 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 active:scale-[0.98] transition-all duration-300 text-xs font-bold text-slate-400 hover:text-white cursor-pointer text-center"
+                            >
+                              Discard
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Pre-generation instruction placeholder */
+                        <div className="text-center space-y-4 max-w-xs z-10">
+                          <div className="w-14 h-14 rounded-2xl bg-slate-950 border border-slate-900/80 flex items-center justify-center mx-auto text-slate-600 shadow-md">
+                            <Sparkles size={20} />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-white text-sm">Visual Preview Console</h4>
+                            <p className="text-slate-500 text-xs mt-1 leading-relaxed">
+                              Configure attributes on the left and trigger generation to render matching facial models and full body compositions.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {studioView === "create-post" && (
+              <div className="space-y-6">
+                {/* Back button */}
+                <div className="flex items-center justify-between">
+                  <button
+                    onClick={() => setStudioView("landing")}
+                    className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors cursor-pointer font-medium"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="19" x2="5" y1="12" y2="12" />
+                      <polyline points="12 19 5 12 12 5" />
+                    </svg>
+                    Back to Studio Hub
+                  </button>
+                  <span className="text-xs text-slate-500 font-medium">Post Synthesis Console</span>
+                </div>
+
+                <div className="glass-panel border border-slate-900/80 rounded-3xl overflow-hidden shadow-2xl">
+                  <InteractiveInfluencerGenerator />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
