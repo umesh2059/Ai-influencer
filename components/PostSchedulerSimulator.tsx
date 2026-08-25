@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Calendar, Instagram, TikTok, YouTube, Twitter, Check, Sparkles, Zap, ArrowRight } from "./Icons";
+import { Calendar, Instagram, TikTok, YouTube, Twitter, Check, Sparkles, Zap } from "./Icons";
 
 interface ScheduledPost {
   id: string;

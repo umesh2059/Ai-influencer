@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { Sparkles, Instagram, TikTok, YouTube, Twitter, Check, Users, Globe, Zap } from "./Icons";
+import React, { useState } from "react";
+import { Sparkles, Instagram, TikTok, YouTube, Zap } from "./Icons";
 
 
 interface InfluencerProfile {

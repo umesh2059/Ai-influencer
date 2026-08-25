@@ -30,9 +30,15 @@ export async function updateSession(request: NextRequest) {
   );
 
   // IMPORTANT: DO NOT remove this. It refreshes the auth token.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const {
+      data: { user: fetchedUser },
+    } = await supabase.auth.getUser();
+    user = fetchedUser;
+  } catch (err) {
+    console.error("Supabase getUser failed in middleware:", err);
+  }
 
   // Protect /dashboard routes — redirect unauthenticated users to sign in
   if (

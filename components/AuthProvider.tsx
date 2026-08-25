@@ -82,6 +82,20 @@ export default function AuthProvider({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      if (
+        reason &&
+        (reason.message?.includes("Failed to fetch") ||
+          reason.toString().includes("Failed to fetch") ||
+          reason.message?.includes("Load failed"))
+      ) {
+        console.warn("Suppressed Supabase initialization network error:", reason);
+        event.preventDefault();
+      }
+    };
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
     const supabase = createClient();
 
     // Get initial session
@@ -118,6 +132,7 @@ export default function AuthProvider({
 
     return () => {
       subscription.unsubscribe();
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
   }, []);
 
