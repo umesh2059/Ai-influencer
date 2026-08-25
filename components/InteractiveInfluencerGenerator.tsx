@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Sparkles, Instagram, TikTok, YouTube, Twitter, Check, Users, Globe, Zap } from "./Icons";
 
-// Define structured mock database for influencer variations
+
 interface InfluencerProfile {
   name: string;
   handle: string;
@@ -191,11 +191,6 @@ export default function InteractiveInfluencerGenerator() {
   const [progress, setProgress] = useState(0);
   const [profile, setProfile] = useState<InfluencerProfile>(INFLUENCER_DB.Fashion.Photorealistic);
 
-  // Auto-generate on configuration change to make it highly reactive
-  useEffect(() => {
-    setProfile(INFLUENCER_DB[niche][style]);
-  }, [niche, style]);
-
   const handleGenerate = () => {
     setIsGenerating(true);
     setGenerationStep(0);
@@ -257,7 +252,12 @@ export default function InteractiveInfluencerGenerator() {
                   {(["Fashion", "Fitness", "Tech & Gaming", "Travel"] as const).map((n) => (
                     <button
                       key={n}
-                      onClick={() => !isGenerating && setNiche(n)}
+                      onClick={() => {
+                        if (!isGenerating) {
+                          setNiche(n);
+                          setProfile(INFLUENCER_DB[n][style]);
+                        }
+                      }}
                       disabled={isGenerating}
                       className={`py-3 px-4 rounded-xl border text-sm font-medium transition-all duration-200 cursor-pointer ${
                         niche === n
@@ -281,7 +281,12 @@ export default function InteractiveInfluencerGenerator() {
                   {(["Photorealistic", "Cyberpunk", "Anime/3D"] as const).map((s) => (
                     <button
                       key={s}
-                      onClick={() => !isGenerating && setStyle(s)}
+                      onClick={() => {
+                        if (!isGenerating) {
+                          setStyle(s);
+                          setProfile(INFLUENCER_DB[niche][s]);
+                        }
+                      }}
                       disabled={isGenerating}
                       className={`py-2.5 px-2 rounded-xl border text-xs font-medium transition-all duration-200 cursor-pointer ${
                         style === s
@@ -302,16 +307,16 @@ export default function InteractiveInfluencerGenerator() {
                 </h3>
                 <p className="text-xs text-slate-400 mb-4">Optimizes resolution and media size constraints.</p>
                 <div className="flex gap-3">
-                  {[
+                  {([
                     { id: "Instagram", icon: Instagram, label: "Instagram", color: "hover:text-pink-400" },
                     { id: "TikTok", icon: TikTok, label: "TikTok", color: "hover:text-teal-400" },
                     { id: "YouTube", icon: YouTube, label: "YouTube Shorts", color: "hover:text-red-400" }
-                  ].map((p) => {
+                  ] as const).map((p) => {
                     const Icon = p.icon;
                     return (
                       <button
                         key={p.id}
-                        onClick={() => !isGenerating && setPlatform(p.id as any)}
+                        onClick={() => !isGenerating && setPlatform(p.id)}
                         disabled={isGenerating}
                         className={`flex-1 py-3 px-3 rounded-xl border text-xs font-medium flex flex-col items-center gap-2 transition-all duration-200 cursor-pointer ${
                           platform === p.id

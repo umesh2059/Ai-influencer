@@ -262,7 +262,7 @@ export default function PostSchedulerSimulator() {
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-500">Maximum Virality.</span>
             </h2>
             <p className="text-slate-400 text-lg leading-relaxed">
-              Once generated, your AI Influencer doesn't sleep. Our smart scheduler automatically posts content, selects tags, drafts copy, and schedules posts for times when engagement peaks.
+              Once generated, your AI Influencer doesn&apos;t sleep. Our smart scheduler automatically posts content, selects tags, drafts copy, and schedules posts for times when engagement peaks.
             </p>
 
             <div className="space-y-4 pt-4">
@@ -281,7 +281,7 @@ export default function PostSchedulerSimulator() {
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold text-white">Custom Copywriting Engine</h4>
-                  <p className="text-xs text-slate-400 mt-0.5">Writes captions matching your influencer's unique voice style.</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Writes captions matching your influencer&apos;s unique voice style.</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
