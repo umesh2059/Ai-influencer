@@ -29,6 +29,39 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Defensive shield against conflicting Web3 wallet extensions (evmAsk.js, MetaMask, etc.)
+              (function() {
+                try {
+                  window.addEventListener('error', function(e) {
+                    if (e && (
+                      (e.message && e.message.indexOf('ethereum') !== -1) ||
+                      (e.filename && e.filename.indexOf('evmAsk') !== -1) ||
+                      (e.message && e.message.indexOf('evmAsk') !== -1)
+                    )) {
+                      e.stopImmediatePropagation();
+                      e.preventDefault();
+                    }
+                  }, true);
+
+                  var _ethereum = undefined;
+                  if (!Object.prototype.hasOwnProperty.call(window, 'ethereum')) {
+                    Object.defineProperty(window, 'ethereum', {
+                      configurable: true,
+                      enumerable: true,
+                      get: function() { return _ethereum; },
+                      set: function(val) { _ethereum = val; }
+                    });
+                  }
+                } catch(err) {}
+              })();
+            `,
+          }}
+        />
+      </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <AuthProvider>{children}</AuthProvider>
       </body>

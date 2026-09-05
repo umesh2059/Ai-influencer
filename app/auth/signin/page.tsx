@@ -16,7 +16,7 @@ function SignInContent() {
   const [message, setMessage] = useState<string | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signInDemo } = useAuth();
 
   // If user is already logged in, redirect to dashboard
   useEffect(() => {
@@ -29,7 +29,7 @@ function SignInContent() {
   useEffect(() => {
     const errorParam = searchParams.get("error");
     if (errorParam === "auth_callback_error") {
-      setError("Authentication failed. Please try again.");
+      setError("OAuth authentication failed. Please try again or use email sign-in / demo access.");
     }
   }, [searchParams]);
 
@@ -39,37 +39,91 @@ function SignInContent() {
     setError(null);
     setMessage(null);
 
+    const trimmedEmail = email.trim().toLowerCase();
+
+    // Client-side validations
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      setLoading(false);
+      return;
+    }
+
+    if (trimmedEmail.endsWith("@example.com") || trimmedEmail.endsWith("@test.com")) {
+      setError("Supabase blocks dummy domains like @example.com. Please use a valid email (e.g. yourname@gmail.com) or click 'Instant Demo Access' below.");
+      setLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
 
     if (mode === "signup") {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            full_name: fullName,
+      try {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: trimmedEmail,
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim() || undefined,
+            },
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-        },
-      });
+        });
 
-      if (error) {
-        setError(error.message);
-      } else {
-        setMessage(
-          "Check your email for a confirmation link! You can close this tab once confirmed."
-        );
+        if (signUpError) {
+          const errMsg = signUpError.message.toLowerCase();
+          if (errMsg.includes("rate limit") || (signUpError as any).status === 429) {
+            setError(
+              "⚠️ Supabase email rate limit reached (free tier allows max 3-4 emails/hr). Please use 'Instant Demo Access' below to enter immediately, or turn off 'Confirm email' in your Supabase Dashboard (Auth -> Providers -> Email)."
+            );
+          } else if (errMsg.includes("invalid") && errMsg.includes("email")) {
+            setError("Email address is invalid or not allowed by Supabase. Please use a standard email provider like Gmail.");
+          } else {
+            setError(signUpError.message);
+          }
+        } else if (data?.session) {
+          // If Supabase has email confirmation disabled, a session is returned immediately
+          router.push("/dashboard");
+          return;
+        } else {
+          setMessage(
+            "Account created! Check your email inbox to confirm your account, then come back here to sign in."
+          );
+        }
+      } catch (err: any) {
+        setError(err?.message || "An unexpected error occurred during sign up.");
       }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      try {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
 
-      if (error) {
-        setError(error.message);
-      } else {
-        router.push("/dashboard");
+        if (signInError) {
+          const errMsg = signInError.message.toLowerCase();
+          if (errMsg.includes("invalid login credentials")) {
+            setError(
+              "Invalid email or password. If you haven't created an account yet, please click 'Create Account' above!"
+            );
+          } else if (errMsg.includes("email not confirmed")) {
+            setError(
+              "Please confirm your email via the link sent to your inbox before signing in, or use 'Instant Demo Access' below."
+            );
+          } else {
+            setError(signInError.message);
+          }
+        } else if (data?.session) {
+          router.push("/dashboard");
+          return;
+        }
+      } catch (err: any) {
+        setError(err?.message || "An unexpected error occurred during sign in.");
       }
     }
 
@@ -80,21 +134,31 @@ function SignInContent() {
     setLoading(true);
     setError(null);
 
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
 
-    if (error) {
-      setError(error.message);
+      if (error) {
+        setError(error.message);
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed to initialize Google Sign-In.");
       setLoading(false);
     }
   };
 
-  // Show nothing while checking auth state
+  const handleDemoAccess = () => {
+    signInDemo();
+    router.push("/dashboard");
+  };
+
+  // Show spinner while checking auth state
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#030014]">
@@ -104,7 +168,7 @@ function SignInContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#030014] relative overflow-hidden px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#030014] relative overflow-hidden px-4 py-12">
       {/* Ambient background glows */}
       <div className="absolute top-1/4 left-1/3 w-[500px] h-[500px] bg-purple-600/8 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/3 w-[400px] h-[400px] bg-pink-600/8 rounded-full blur-[100px] pointer-events-none" />
@@ -113,10 +177,10 @@ function SignInContent() {
       {/* Grid pattern */}
       <div className="absolute inset-0 bg-grid-pattern opacity-30 pointer-events-none" />
 
-      {/* Card */}
+      {/* Card Container */}
       <div className="relative z-10 w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
+        {/* Brand Logo */}
+        <div className="text-center mb-6">
           <a href="/" className="inline-flex items-center gap-2 group">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 group-hover:scale-105 transition-transform duration-300">
               <Sparkles size={20} className="fill-white/10" />
@@ -130,15 +194,64 @@ function SignInContent() {
 
         {/* Auth Card */}
         <div className="glass-panel rounded-3xl border border-slate-800/80 p-8 shadow-2xl backdrop-blur-xl">
+          {/* Instant Demo Access Button */}
+          <button
+            type="button"
+            onClick={handleDemoAccess}
+            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-purple-900/40 via-pink-900/30 to-purple-900/40 border border-purple-500/40 hover:border-purple-400 text-purple-200 hover:text-white font-semibold text-sm transition-all duration-300 flex items-center justify-center gap-2.5 shadow-lg shadow-purple-950/40 hover:shadow-purple-900/60 mb-6 group cursor-pointer"
+          >
+            <span className="text-base group-hover:scale-110 transition-transform">🚀</span>
+            <span>
+              Instant Demo Access{" "}
+              <span className="text-xs text-purple-400 font-normal block sm:inline">
+                (Skip sign-up & get 300 credits)
+              </span>
+            </span>
+          </button>
+
+          {/* Mode Switcher Tabs */}
+          <div className="flex rounded-2xl bg-slate-900/80 p-1 mb-6 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signin");
+                setError(null);
+                setMessage(null);
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
+                mode === "signin"
+                  ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md shadow-purple-900/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("signup");
+                setError(null);
+                setMessage(null);
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer ${
+                mode === "signup"
+                  ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-md shadow-purple-900/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
           {/* Title */}
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-white mb-1.5">
               {mode === "signin" ? "Welcome Back" : "Create Your Account"}
             </h1>
-            <p className="text-sm text-slate-400">
+            <p className="text-xs text-slate-400">
               {mode === "signin"
-                ? "Sign in to access your AI influencer dashboard"
-                : "Start creating AI-powered virtual influencers"}
+                ? "Enter your credentials to access your influencer studio"
+                : "Sign up to begin creating virtual AI influencers"}
             </p>
           </div>
 
@@ -146,7 +259,7 @@ function SignInContent() {
           <button
             onClick={handleGoogleSignIn}
             disabled={loading}
-            className="w-full py-3.5 px-4 rounded-2xl bg-white/5 border border-slate-700/80 hover:bg-white/10 hover:border-slate-600 text-white font-medium text-sm transition-all duration-300 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-6"
+            className="w-full py-3 px-4 rounded-2xl bg-white/5 border border-slate-700/80 hover:bg-white/10 hover:border-slate-600 text-white font-medium text-sm transition-all duration-300 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed mb-5"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -170,10 +283,10 @@ function SignInContent() {
           </button>
 
           {/* Divider */}
-          <div className="flex items-center gap-4 mb-6">
+          <div className="flex items-center gap-4 mb-5">
             <div className="flex-1 h-px bg-slate-800" />
-            <span className="text-xs text-slate-500 uppercase tracking-wider font-medium">
-              or
+            <span className="text-[11px] text-slate-500 uppercase tracking-wider font-medium">
+              or with email
             </span>
             <div className="flex-1 h-px bg-slate-800" />
           </div>
@@ -193,7 +306,7 @@ function SignInContent() {
                   type="text"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="John Doe"
+                  placeholder="Alex Rivera"
                   required
                   className="w-full py-3 px-4 rounded-xl bg-slate-900/50 border border-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/50 transition-all duration-300"
                 />
@@ -212,19 +325,22 @@ function SignInContent() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
+                placeholder="creator@gmail.com"
                 required
                 className="w-full py-3 px-4 rounded-xl bg-slate-900/50 border border-slate-800 text-white placeholder-slate-600 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500/50 transition-all duration-300"
               />
             </div>
 
             <div>
-              <label
-                htmlFor="password"
-                className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2"
-              >
-                Password
-              </label>
+              <div className="flex justify-between items-center mb-2">
+                <label
+                  htmlFor="password"
+                  className="block text-xs font-semibold text-slate-400 uppercase tracking-wider"
+                >
+                  Password
+                </label>
+                <span className="text-[11px] text-slate-500">Min. 6 chars</span>
+              </div>
               <input
                 id="password"
                 type="password"
@@ -237,19 +353,19 @@ function SignInContent() {
               />
             </div>
 
-            {/* Error / Success messages */}
+            {/* Error / Success feedback messages */}
             {error && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+              <div className="p-3.5 rounded-xl bg-red-500/10 border border-red-500/25 text-red-400 text-xs font-medium leading-relaxed animate-fadeIn">
                 {error}
               </div>
             )}
             {message && (
-              <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 text-xs font-medium">
+              <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-medium leading-relaxed animate-fadeIn">
                 {message}
               </div>
             )}
 
-            {/* Submit */}
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -265,13 +381,14 @@ function SignInContent() {
             </button>
           </form>
 
-          {/* Toggle mode */}
+          {/* Bottom toggle note */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-slate-400">
+            <p className="text-xs text-slate-400">
               {mode === "signin"
-                ? "Don't have an account?"
-                : "Already have an account?"}
+                ? "Don't have an account yet?"
+                : "Already created an account?"}
               <button
+                type="button"
                 onClick={() => {
                   setMode(mode === "signin" ? "signup" : "signin");
                   setError(null);
@@ -279,17 +396,17 @@ function SignInContent() {
                 }}
                 className="ml-2 text-purple-400 hover:text-purple-300 font-semibold transition-colors cursor-pointer"
               >
-                {mode === "signin" ? "Sign Up" : "Sign In"}
+                {mode === "signin" ? "Create Account" : "Sign In"}
               </button>
             </p>
           </div>
         </div>
 
-        {/* Back to home */}
+        {/* Back to Home Link */}
         <div className="text-center mt-6">
           <a
             href="/"
-            className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+            className="text-xs text-slate-500 hover:text-slate-400 transition-colors inline-flex items-center gap-1.5"
           >
             ← Back to Home
           </a>

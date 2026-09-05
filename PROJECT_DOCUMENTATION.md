@@ -343,7 +343,26 @@ Visit `http://localhost:3000` to view the application.
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 5. In your Supabase Dashboard ➔ **Authentication** ➔ **URL Configuration**, add your production URL to the Redirect URLs:
    - `https://your-production-domain.vercel.app/auth/callback`
-6. Click **Deploy**!
+### 6. Authentication Troubleshooting: Supabase Rate Limits & Solutions
+
+If you encounter authentication errors in your browser console:
+
+1. **`token?grant_type=password 400 (Invalid login credentials)`**:
+   * **Cause:** Trying to sign in with an email/password before creating an account.
+   * **Solution:** Click the **"Create Account"** tab first to register your user account!
+
+2. **`signup 400 (Email address is invalid)`**:
+   * **Cause:** Typing test dummy domains such as `test@example.com` or `admin@test.com`. Supabase's GoTrue email engine blacklists `example.com` as a disposable/fake domain.
+   * **Solution:** Use a real email address domain like `@gmail.com` or `@outlook.com`.
+
+3. **`signup 429 (email rate limit exceeded)`**:
+   * **Cause:** Supabase free tier includes a default shared SMTP service with a strict quota of **3 to 4 emails per hour**. When "Confirm email" is enabled in Supabase, each sign-up sends a verification email, rapidly exceeding the quota during development.
+   * **Solution A (Recommended for development):** Go to your **Supabase Dashboard** ➔ **Authentication** ➔ **Providers** ➔ **Email** ➔ Toggle **OFF** "Confirm email". This enables immediate sign-ins with zero email rate limits!
+   * **Solution B:** Click the **"🚀 Instant Demo Access"** button on the `/auth/signin` page to bypass all email limits and instantly enter the dashboard with 300 credits.
+
+4. **`signin 404 (Not Found)`**:
+   * **Cause:** Navigating to `http://localhost:3000/signin` instead of `/auth/signin`.
+   * **Solution:** Permanent automatic redirects are configured in `next.config.ts` and `middleware.ts` so `/signin`, `/login`, and `/signup` automatically resolve to `/auth/signin`.
 
 ---
 
@@ -351,7 +370,7 @@ Visit `http://localhost:3000` to view the application.
 
 In this project, we built a **production-grade AI Influencer platform** that solves real-world cost barriers and generative AI consistency issues. It features:
 1. **Modern Next.js 16 + React 19 architecture** with zero icon bloat and Tailwind CSS v4 glassmorphism.
-2. **End-to-end Supabase SSR authentication** with OAuth and automatic profile provisioning.
+2. **End-to-end Supabase SSR authentication** with OAuth, Instant Demo access, and automatic profile provisioning.
 3. **A consistent AI character rigging pipeline** that generates both facial portraits and full-body renders.
 4. **An interactive multi-channel social post generator and weekly scheduler**.
 5. **A live credit economy system** that protects backend resources.

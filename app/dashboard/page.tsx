@@ -203,11 +203,40 @@ export default function DashboardPage() {
     }
 
     if (user) {
+      // Optimistically initialize profile immediately so dashboard renders with zero delay!
+      setProfile((prev) => prev || {
+        id: user.id,
+        email: user.email || "",
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Creator",
+        avatar_url: user.user_metadata?.avatar_url || null,
+        created_at: new Date().toISOString(),
+        credits: 300,
+      });
+      setSettingsName(user.user_metadata?.full_name || user.user_metadata?.name || "");
+      setSettingsEmail(user.email || "");
+      setProfileLoading(false);
+
+      // Background profile sync
       fetchProfile();
     }
   }, [user, authLoading, router]);
 
   const fetchProfile = async () => {
+    if (user?.id === "demo-creator-id") {
+      setProfile({
+        id: "demo-creator-id",
+        email: "creator@influencer.ai",
+        full_name: "Demo Creator",
+        avatar_url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&h=400&q=80",
+        created_at: new Date().toISOString(),
+        credits: 300,
+      });
+      setSettingsName("Demo Creator");
+      setSettingsEmail("creator@influencer.ai");
+      setProfileLoading(false);
+      return;
+    }
+
     try {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -274,6 +303,10 @@ export default function DashboardPage() {
       });
     }
 
+    if (user?.id === "demo-creator-id") {
+      return;
+    }
+
     try {
       const supabase = createClient();
       await supabase
@@ -323,8 +356,8 @@ export default function DashboardPage() {
     setIsGeneratingModel(false);
   };
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleSignOut = () => {
+    signOut();
     router.push("/");
   };
 

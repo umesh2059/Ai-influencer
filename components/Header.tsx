@@ -27,8 +27,8 @@ export default function Header() {
     { label: "FAQ", href: "#faq" }
   ];
 
-  const handleSignOut = async () => {
-    await signOut();
+  const handleSignOut = () => {
+    signOut();
     router.push("/");
   };
 

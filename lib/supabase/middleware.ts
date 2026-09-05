@@ -40,9 +40,23 @@ export async function updateSession(request: NextRequest) {
     console.error("Supabase getUser failed in middleware:", err);
   }
 
+  // Redirect friendly routes to /auth/signin
+  if (
+    request.nextUrl.pathname === "/signin" ||
+    request.nextUrl.pathname === "/login" ||
+    request.nextUrl.pathname === "/signup"
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/signin";
+    return NextResponse.redirect(url);
+  }
+
+  const isDemo = request.cookies.get("ai_demo_user")?.value === "true";
+
   // Protect /dashboard routes — redirect unauthenticated users to sign in
   if (
     !user &&
+    !isDemo &&
     request.nextUrl.pathname.startsWith("/dashboard")
   ) {
     const url = request.nextUrl.clone();

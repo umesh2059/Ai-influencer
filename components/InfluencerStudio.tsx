@@ -1,5 +1,6 @@
 "use client";
 
+import React, { useState, useEffect } from "react";
 import { Sparkles, Check, Zap } from "./Icons";
 
 // Define inline SVGs for missing icons to ensure the component is self-contained
