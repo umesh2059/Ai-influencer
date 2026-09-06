@@ -139,11 +139,11 @@ const BODY_IMAGES: Record<string, Record<string, string>> = {
 };
 
 const STEPS = [
+  "Connecting to Luma Uni-1 neural engine...",
   "Formulating visual prompt components...",
   "Calibrating facial topology for consistency...",
   "Applying specific hair fibers & lighting renders...",
-  "Simulating body frame and stance geometry...",
-  "Finalizing photorealistic 8k render output! 🎉"
+  "Finalizing photorealistic Luma Uni-1 8k render output! 🎉"
 ];
 
 export default function InfluencerStudio({ userId, credits, onUpdateCredits, isDbLinked }: InfluencerStudioProps) {
@@ -295,9 +295,32 @@ export default function InfluencerStudio({ userId, credits, onUpdateCredits, isD
       });
     }, 120);
 
+    // Asynchronously call Luma Uni-1 API
+    let lumaPortraitUrl = "";
+    try {
+      const lumaKey = typeof window !== "undefined" ? localStorage.getItem("luma_agents_api_key") || undefined : undefined;
+      const res = await fetch("/api/luma/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: dynamicPrompt,
+          aspect_ratio: "1:1",
+          type: "image",
+          apiKey: lumaKey,
+        }),
+      });
+      const data = await res.json();
+      if (data.imageGeneration?.output?.[0]?.url) {
+        lumaPortraitUrl = data.imageGeneration.output[0].url;
+      }
+    } catch (e) {
+      console.error("Luma API request failed:", e);
+    }
+
     // After animation, generate and deduct
     setTimeout(async () => {
-      const portraitUrl = PORTRAIT_IMAGES[gender][vibe] || PORTRAIT_IMAGES[gender]["Casual / Minimalist"];
+      const fallbackPortrait = PORTRAIT_IMAGES[gender][vibe] || PORTRAIT_IMAGES[gender]["Casual / Minimalist"];
+      const portraitUrl = lumaPortraitUrl || fallbackPortrait;
       const bodyUrl = BODY_IMAGES[gender][vibe] || BODY_IMAGES[gender]["Casual / Minimalist"];
 
       setPreviewPortrait(portraitUrl);
@@ -833,7 +856,7 @@ export default function InfluencerStudio({ userId, credits, onUpdateCredits, isD
               >
                 <div className="absolute inset-0 w-1/2 h-full bg-white/10 skew-x-[-25deg] -translate-x-full group-hover:translate-x-[300%] transition-transform duration-1000 ease-out" />
                 <Sparkles size={18} className={isGenerating ? "animate-spin" : "animate-bounce"} />
-                {isGenerating ? "Synthesizing AI Influencer..." : "Generate Influencer (Deducts 50 Credits)"}
+                {isGenerating ? "Synthesizing AI Influencer with Luma Uni-1..." : "Generate Influencer with Luma Uni-1 (Deducts 50 Credits)"}
               </button>
             </div>
           </div>
