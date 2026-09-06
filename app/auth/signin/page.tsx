@@ -77,9 +77,12 @@ function SignInContent() {
 
         if (signUpError) {
           const errMsg = signUpError.message.toLowerCase();
-          if (errMsg.includes("rate limit") || (signUpError as any).status === 429) {
+          if (errMsg.includes("already registered") || errMsg.includes("user already exists")) {
+            setError("An account with this email already exists. Please sign in below!");
+            setMode("signin");
+          } else if (errMsg.includes("rate limit") || (signUpError as any).status === 429) {
             setError(
-              "⚠️ Supabase email rate limit reached (free tier allows max 3-4 emails/hr). Please use 'Instant Demo Access' below to enter immediately, or turn off 'Confirm email' in your Supabase Dashboard (Auth -> Providers -> Email)."
+              "⚠️ Supabase email rate limit reached (free tier allows max 3-4 emails/hr). In your Supabase Dashboard ➔ Authentication ➔ Providers ➔ Email, turn OFF 'Confirm email' so anyone can sign up instantly without rate limits! You can also use 'Instant Demo Access' below."
             );
           } else if (errMsg.includes("invalid") && errMsg.includes("email")) {
             setError("Email address is invalid or not allowed by Supabase. Please use a standard email provider like Gmail.");
@@ -87,13 +90,33 @@ function SignInContent() {
             setError(signUpError.message);
           }
         } else if (data?.session) {
-          // If Supabase has email confirmation disabled, a session is returned immediately
+          // When Supabase has "Confirm email" disabled, session is returned immediately
           router.push("/dashboard");
+          router.refresh();
           return;
         } else {
-          setMessage(
-            "Account created! Check your email inbox to confirm your account, then come back here to sign in."
-          );
+          // Session was not returned immediately; attempt direct password sign-in
+          const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+            email: trimmedEmail,
+            password,
+          });
+
+          if (signInData?.session) {
+            router.push("/dashboard");
+            router.refresh();
+            return;
+          }
+
+          if (signInErr && signInErr.message.toLowerCase().includes("email not confirmed")) {
+            setError(
+              "Account created! However, your Supabase project currently requires email confirmation. 👉 To allow anyone to sign in instantly without confirmation: In your Supabase Dashboard ➔ Authentication ➔ Providers ➔ Email ➔ toggle OFF 'Confirm email'. Or use Instant Demo Access below."
+            );
+          } else {
+            setMessage(
+              "Account created! You can now sign in with your email and password."
+            );
+            setMode("signin");
+          }
         }
       } catch (err: any) {
         setError(err?.message || "An unexpected error occurred during sign up.");
@@ -113,13 +136,14 @@ function SignInContent() {
             );
           } else if (errMsg.includes("email not confirmed")) {
             setError(
-              "Please confirm your email via the link sent to your inbox before signing in, or use 'Instant Demo Access' below."
+              "⚠️ Email not confirmed. Supabase requires email verification by default. 👉 To allow anyone to sign in immediately: Go to Supabase Dashboard ➔ Authentication ➔ Providers ➔ Email ➔ turn OFF 'Confirm email'. You can also click 'Instant Demo Access' below."
             );
           } else {
             setError(signInError.message);
           }
         } else if (data?.session) {
           router.push("/dashboard");
+          router.refresh();
           return;
         }
       } catch (err: any) {

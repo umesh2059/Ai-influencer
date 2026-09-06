@@ -360,7 +360,12 @@ If you encounter authentication errors in your browser console:
    * **Solution A (Recommended for development):** Go to your **Supabase Dashboard** ➔ **Authentication** ➔ **Providers** ➔ **Email** ➔ Toggle **OFF** "Confirm email". This enables immediate sign-ins with zero email rate limits!
    * **Solution B:** Click the **"🚀 Instant Demo Access"** button on the `/auth/signin` page to bypass all email limits and instantly enter the dashboard with 300 credits.
 
-4. **`signin 404 (Not Found)`**:
+4. **`signin 400 (Email not confirmed)`**:
+   * **Cause:** Supabase by default requires users to verify their email via a magic link before their first login.
+   * **Solution:** In your **Supabase Dashboard** ➔ **Authentication** ➔ **Providers** ➔ **Email** ➔ Toggle **OFF** **"Confirm email"** and click **Save**. Once turned off, every newly created account is instantly activated and can log in immediately with zero email verification.
+   * **For existing stuck accounts:** Go to **Authentication** ➔ **Users** in Supabase, click the `...` (options) next to the stuck user ➔ **Confirm user** (or delete and re-register).
+
+5. **`signin 404 (Not Found)`**:
    * **Cause:** Navigating to `http://localhost:3000/signin` instead of `/auth/signin`.
    * **Solution:** Permanent automatic redirects are configured in `next.config.ts` and `middleware.ts` so `/signin`, `/login`, and `/signup` automatically resolve to `/auth/signin`.
 
