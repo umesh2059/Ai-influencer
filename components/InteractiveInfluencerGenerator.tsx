@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { Sparkles, Instagram, TikTok, YouTube, Zap } from "./Icons";
+import React, { useState, useEffect } from "react";
+import { Sparkles, Instagram, TikTok, YouTube } from "./Icons";
 
 interface InfluencerProfile {
   name: string;
@@ -184,13 +184,12 @@ const INFLUENCER_DB: Record<string, Record<string, InfluencerProfile>> = {
   }
 };
 
-const LUMA_GENERATING_STEPS = [
-  "Connecting to Luma Agents REST API...",
-  "Luma Uni-1: Parsing prompt & formulating neural prompt embeddings...",
-  "Luma Uni-1: Synthesizing facial topology & ray-traced subsurface scattering...",
-  "Luma Ray-3.2: Rigging motion vectors and temporal consistency...",
-  "Luma Ray-3.2: Rendering 720p cinematic 5s video sequence...",
-  "Downloading high-fidelity presigned outputs from Luma... 🎉"
+const GEMINI_GENERATING_STEPS = [
+  "Connecting to Google Gemini API...",
+  "Gemini: Parsing prompt & formulating neural prompt embeddings...",
+  "Gemini: Synthesizing facial topology & photorealistic textures...",
+  "Gemini: Applying volumetric lighting and skin shading...",
+  "Downloading high-fidelity output from Gemini... 🎉"
 ];
 
 export default function InteractiveInfluencerGenerator() {
@@ -198,8 +197,7 @@ export default function InteractiveInfluencerGenerator() {
   const [style, setStyle] = useState<"Photorealistic" | "Cyberpunk" | "Anime/3D">("Photorealistic");
   const [platform, setPlatform] = useState<"Instagram" | "TikTok" | "YouTube">("Instagram");
   const [aspectRatio, setAspectRatio] = useState<"1:1" | "9:16" | "16:9">("9:16");
-  const [outputMode, setOutputMode] = useState<"both" | "image" | "video">("both");
-  
+
   // Custom Selection Prompt
   const [userPrompt, setUserPrompt] = useState<string>("");
   const [apiKey, setApiKey] = useState<string>("");
@@ -211,11 +209,8 @@ export default function InteractiveInfluencerGenerator() {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState("");
   const [profile, setProfile] = useState<InfluencerProfile>(INFLUENCER_DB.Fashion.Photorealistic);
-  const [activeMediaTab, setActiveMediaTab] = useState<"image" | "video" | "split">("image");
-  const [isLiveLumaOutput, setIsLiveLumaOutput] = useState(false);
+  const [isLiveGeminiOutput, setIsLiveGeminiOutput] = useState(false);
   const [notification, setNotification] = useState<{ text: string; type: "success" | "info" | "error" } | null>(null);
-
-  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   // Initialize and update default prompt when selections change
   useEffect(() => {
@@ -226,49 +221,25 @@ export default function InteractiveInfluencerGenerator() {
 
   // Load API key from localStorage if available
   useEffect(() => {
-    const savedKey = localStorage.getItem("luma_agents_api_key");
+    const savedKey = localStorage.getItem("gemini_api_key");
     if (savedKey) setApiKey(savedKey);
   }, []);
 
   const handleSaveKey = (val: string) => {
     setApiKey(val);
     if (val.trim()) {
-      localStorage.setItem("luma_agents_api_key", val.trim());
-      setNotification({ text: "Luma API Key saved in local session!", type: "success" });
+      localStorage.setItem("gemini_api_key", val.trim());
+      setNotification({ text: "Gemini API Key saved in local session!", type: "success" });
     } else {
-      localStorage.removeItem("luma_agents_api_key");
+      localStorage.removeItem("gemini_api_key");
     }
-  };
-
-  const pollGeneration = async (id: string, currentApiKey?: string): Promise<string | null> => {
-    const maxPolls = 60; // 2 minutes max
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      try {
-        const url = `/api/luma/status?id=${encodeURIComponent(id)}${currentApiKey ? `&apiKey=${encodeURIComponent(currentApiKey)}` : ""}`;
-        const res = await fetch(url);
-        if (!res.ok) continue;
-        const data = await res.json();
-        
-        if (data.state === "completed") {
-          return data.output?.[0]?.url || null;
-        }
-        if (data.state === "failed") {
-          console.error("Generation failed:", data.failure_reason);
-          return null;
-        }
-      } catch (err) {
-        console.error("Poll error:", err);
-      }
-    }
-    return null;
   };
 
   const handleGenerate = async () => {
     setIsGenerating(true);
     setGenerationStep(0);
     setProgress(5);
-    setStatusMessage("Submitting request to Luma Agents REST API (Uni-1)...");
+    setStatusMessage("Submitting request to Google Gemini API...");
     setNotification(null);
 
     // Dynamic progress bar ticker
@@ -277,23 +248,22 @@ export default function InteractiveInfluencerGenerator() {
         if (prev >= 90) return prev;
         const next = prev + 3;
         const stepIdx = Math.min(
-          Math.floor((next / 100) * LUMA_GENERATING_STEPS.length),
-          LUMA_GENERATING_STEPS.length - 1
+          Math.floor((next / 100) * GEMINI_GENERATING_STEPS.length),
+          GEMINI_GENERATING_STEPS.length - 1
         );
         setGenerationStep(stepIdx);
-        setStatusMessage(LUMA_GENERATING_STEPS[stepIdx]);
+        setStatusMessage(GEMINI_GENERATING_STEPS[stepIdx]);
         return next;
       });
     }, 350);
 
     try {
-      const response = await fetch("/api/luma/generate", {
+      const response = await fetch("/api/gemini/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: userPrompt,
           aspect_ratio: aspectRatio,
-          type: outputMode,
           apiKey: apiKey.trim() || undefined,
         }),
       });
@@ -301,48 +271,27 @@ export default function InteractiveInfluencerGenerator() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate with Luma API");
+        throw new Error(data.error || "Failed to generate with Gemini API");
       }
 
       let generatedImageUrl = profile.imageUrl;
-      let generatedVideoUrl = profile.videoUrl;
       let usedLiveApi = false;
 
       // Handle Simulated/Fallback mode
       if (data.isSimulated) {
         setNotification({
-          text: "Demo Preview: Set your LUMA_AGENTS_API_KEY to trigger live Uni-1 & Ray-3.2 generations.",
+          text: "Demo Preview: Set your GEMINI_API_KEY to trigger live generations.",
           type: "info",
         });
         const currentPreset = INFLUENCER_DB[niche][style];
         generatedImageUrl = currentPreset.imageUrl;
-        generatedVideoUrl = currentPreset.videoUrl;
       } else {
-        // Real Luma Generation Polling
         usedLiveApi = true;
-        setStatusMessage("Luma generation queued! Polling output status...");
-
-        const promises: Promise<any>[] = [];
-
-        if (data.imageGeneration?.id) {
-          promises.push(
-            pollGeneration(data.imageGeneration.id, apiKey.trim()).then((url) => {
-              if (url) generatedImageUrl = url;
-            })
-          );
+        if (data.imageGeneration?.output?.[0]?.url) {
+          generatedImageUrl = data.imageGeneration.output[0].url;
         }
-
-        if (data.videoGeneration?.id) {
-          promises.push(
-            pollGeneration(data.videoGeneration.id, apiKey.trim()).then((url) => {
-              if (url) generatedVideoUrl = url;
-            })
-          );
-        }
-
-        await Promise.all(promises);
         setNotification({
-          text: "Successfully generated influencer model with Luma Uni-1 & Ray-3.2!",
+          text: "Successfully generated influencer model with Gemini!",
           type: "success",
         });
       }
@@ -352,24 +301,20 @@ export default function InteractiveInfluencerGenerator() {
 
       setTimeout(() => {
         setIsGenerating(false);
-        setIsLiveLumaOutput(usedLiveApi);
+        setIsLiveGeminiOutput(usedLiveApi);
         const preset = INFLUENCER_DB[niche][style];
         setProfile({
           ...preset,
           imageUrl: generatedImageUrl,
-          videoUrl: generatedVideoUrl,
-          postCaption: `Synthesized with Luma Uni-1 & Ray-3.2. ${preset.postCaption}`,
+          postCaption: `Synthesized with Gemini. ${preset.postCaption}`,
         });
-        if (outputMode === "video") setActiveMediaTab("video");
-        else if (outputMode === "both") setActiveMediaTab("split");
-        else setActiveMediaTab("image");
       }, 500);
     } catch (err: any) {
       clearInterval(progressInterval);
       setIsGenerating(false);
       console.error(err);
       setNotification({
-        text: `Error: ${err.message || "Failed to connect to Luma API."} Using high-resolution preview.`,
+        text: `Error: ${err.message || "Failed to connect to Gemini API."} Using high-resolution preview.`,
         type: "error",
       });
       setProfile(INFLUENCER_DB[niche][style]);
@@ -386,17 +331,17 @@ export default function InteractiveInfluencerGenerator() {
         <div className="text-center max-w-3xl mx-auto mb-14">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel border-purple-500/20 text-purple-400 text-xs font-semibold uppercase tracking-wider mb-4 shadow-lg shadow-purple-900/20">
             <Sparkles size={14} className="animate-pulse" />
-            Luma Uni-1 & Ray-3.2 Influencer Engine
+            Gemini AI Influencer Engine
           </div>
           <h2 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white mb-5">
             Synthesize Influencers with{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-fuchsia-400 to-pink-500">
-              Luma Uni-1 Models
+              Google Gemini
             </span>
           </h2>
           <p className="text-base md:text-lg text-slate-400 leading-relaxed">
             Select creator attributes, tune visual parameters, and formulate tailored prompts.
-            Our Luma-powered async architecture delivers photorealistic influencer images (Uni-1) and high-fps videos (Ray-3.2).
+            Our Gemini-powered architecture delivers photorealistic influencer images.
           </p>
         </div>
 
@@ -550,43 +495,14 @@ export default function InteractiveInfluencerGenerator() {
                 </div>
               </div>
 
-              {/* Step 4: Model Output Mode (Image / Video / Both) */}
-              <div>
-                <h3 className="text-xs font-bold text-white mb-2 flex items-center gap-1.5">
-                  <span className="w-4 h-4 rounded bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-[10px]">5</span>
-                  Luma Model Target
-                </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "both", label: "Image + Video", sub: "Uni-1 & Ray-3.2" },
-                    { id: "image", label: "Image Model", sub: "Luma Uni-1" },
-                    { id: "video", label: "Video Model", sub: "Luma Ray-3.2" }
-                  ].map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => !isGenerating && setOutputMode(m.id as any)}
-                      disabled={isGenerating}
-                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer ${
-                        outputMode === m.id
-                          ? "bg-emerald-600/20 border-emerald-500 text-white shadow-sm"
-                          : "bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700"
-                      }`}
-                    >
-                      <span className="text-xs font-bold block">{m.label}</span>
-                      <span className="text-[10px] text-emerald-400 font-mono block mt-0.5">{m.sub}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Step 5: User Selection Prompt Area */}
+              {/* Step 4: User Selection Prompt Area */}
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <label className="text-xs font-bold text-white flex items-center gap-1.5">
-                    <span className="w-4 h-4 rounded bg-fuchsia-500/20 flex items-center justify-center text-fuchsia-400 text-[10px]">6</span>
+                    <span className="w-4 h-4 rounded bg-fuchsia-500/20 flex items-center justify-center text-fuchsia-400 text-[10px]">5</span>
                     User Selection Prompt
                   </label>
-                  <span className="text-[10px] text-fuchsia-400 font-mono">Luma Uni-1 Input</span>
+                  <span className="text-[10px] text-fuchsia-400 font-mono">Gemini Input</span>
                 </div>
                 <textarea
                   rows={3}
@@ -614,7 +530,7 @@ export default function InteractiveInfluencerGenerator() {
                 </div>
               </div>
 
-              {/* Optional Luma API Key Direct Input */}
+              {/* Optional Gemini API Key Direct Input */}
               <div className="pt-2 border-t border-slate-900/60">
                 <div className="flex justify-between items-center">
                   <button
@@ -622,7 +538,7 @@ export default function InteractiveInfluencerGenerator() {
                     onClick={() => setShowKeyInput(!showKeyInput)}
                     className="text-[11px] text-purple-400 hover:text-purple-300 font-medium cursor-pointer flex items-center gap-1"
                   >
-                    <span>{showKeyInput ? "Hide API Key" : "⚙️ Use custom LUMA_AGENTS_API_KEY"}</span>
+                    <span>{showKeyInput ? "Hide API Key" : "⚙️ Use custom GEMINI_API_KEY"}</span>
                   </button>
                   <span className="text-[10px] text-slate-500">
                     {apiKey.trim() ? "Custom Key Active" : "Default / Fallback Active"}
@@ -632,7 +548,7 @@ export default function InteractiveInfluencerGenerator() {
                   <div className="mt-2 space-y-1.5 animate-fadeIn">
                     <input
                       type="password"
-                      placeholder="luma-api-..."
+                      placeholder="AIza..."
                       value={apiKey}
                       onChange={(e) => handleSaveKey(e.target.value)}
                       className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 font-mono"
@@ -656,10 +572,10 @@ export default function InteractiveInfluencerGenerator() {
                 <Sparkles size={20} className={isGenerating ? "animate-spin text-white" : "animate-bounce text-yellow-300"} />
                 <div className="text-left">
                   <div className="text-sm font-extrabold leading-none">
-                    {isGenerating ? "Synthesizing with Luma..." : "Generate Influencer"}
+                    {isGenerating ? "Synthesizing with Gemini..." : "Generate Influencer"}
                   </div>
                   <div className="text-[10px] font-mono text-purple-200 font-normal mt-0.5">
-                    {isGenerating ? "Processing REST Generation Job" : "Powered by Luma Uni-1 & Ray-3.2"}
+                    {isGenerating ? "Processing Generation Job" : "Powered by Google Gemini"}
                   </div>
                 </div>
               </button>
@@ -682,10 +598,10 @@ export default function InteractiveInfluencerGenerator() {
                 <div className="space-y-4 max-w-md">
                   <div>
                     <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-purple-400 bg-purple-500/10 px-3 py-1 rounded-full border border-purple-500/20">
-                      Luma Agent Async Pipeline
+                      Gemini Generation Pipeline
                     </span>
                     <h4 className="text-xl font-extrabold text-white mt-2">
-                      Rendering Persona Models
+                      Rendering Persona Model
                     </h4>
                   </div>
                   <div className="w-72 h-3 bg-slate-900 rounded-full overflow-hidden mx-auto border border-slate-800 p-0.5">
@@ -695,10 +611,10 @@ export default function InteractiveInfluencerGenerator() {
                     />
                   </div>
                   <p className="text-xs text-purple-300 font-mono min-h-8 leading-relaxed animate-pulse">
-                    {statusMessage || LUMA_GENERATING_STEPS[generationStep]}
+                    {statusMessage || GEMINI_GENERATING_STEPS[generationStep]}
                   </p>
                   <p className="text-[11px] text-slate-500 font-mono">
-                    Progress: {progress}% • Polling rate: 2.0s
+                    Progress: {progress}%
                   </p>
                 </div>
               </div>
@@ -711,45 +627,18 @@ export default function InteractiveInfluencerGenerator() {
                 <div className="w-3 h-3 rounded-full bg-yellow-500/70" />
                 <div className="w-3 h-3 rounded-full bg-green-500/70" />
                 <span className="text-xs font-mono text-slate-400 ml-2">
-                  Luma Agent Status:{" "}
-                  <span className={isLiveLumaOutput ? "text-emerald-400 font-bold" : "text-purple-400 font-bold"}>
-                    {isLiveLumaOutput ? "LIVE UNI-1 API" : "ACTIVE MODEL RIG"}
+                  Gemini Status:{" "}
+                  <span className={isLiveGeminiOutput ? "text-emerald-400 font-bold" : "text-purple-400 font-bold"}>
+                    {isLiveGeminiOutput ? "LIVE GEMINI API" : "ACTIVE MODEL RIG"}
                   </span>
                 </span>
               </div>
 
-              {/* View Selector Tabs */}
+              {/* View Header */}
               <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
-                <button
-                  onClick={() => setActiveMediaTab("image")}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                    activeMediaTab === "image"
-                      ? "bg-purple-600 text-white shadow"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  📸 Image (Uni-1)
-                </button>
-                <button
-                  onClick={() => setActiveMediaTab("video")}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                    activeMediaTab === "video"
-                      ? "bg-pink-600 text-white shadow"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  🎬 Video (Ray-3.2)
-                </button>
-                <button
-                  onClick={() => setActiveMediaTab("split")}
-                  className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                    activeMediaTab === "split"
-                      ? "bg-indigo-600 text-white shadow"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  ⚡ Dual View
-                </button>
+                <span className="px-3 py-1.5 rounded-lg font-semibold bg-purple-600 text-white shadow">
+                  📸 Image
+                </span>
               </div>
             </div>
 
@@ -795,120 +684,47 @@ export default function InteractiveInfluencerGenerator() {
                 </div>
               </div>
 
-              {/* Main Media Showcase (Image / Video / Split) */}
+              {/* Main Media Showcase (Image) */}
               <div className="flex-1 flex flex-col justify-center">
-                {activeMediaTab === "image" && (
-                  <div className="relative rounded-2xl overflow-hidden aspect-[4/5] max-h-[460px] bg-slate-900 border border-purple-500/30 group shadow-2xl mx-auto w-full">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={profile.imageUrl}
-                      alt="Luma Uni-1 Generated Influencer Image"
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                <div className="relative rounded-2xl overflow-hidden aspect-[4/5] max-h-[460px] bg-slate-900 border border-purple-500/30 group shadow-2xl mx-auto w-full">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={profile.imageUrl}
+                    alt="Gemini Generated Influencer Image"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
 
-                    {/* Top badging */}
-                    <div className="absolute top-4 left-4 flex gap-2">
-                      <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-purple-500/40 text-[10px] font-bold text-purple-300 flex items-center gap-1">
-                        <Sparkles size={11} className="text-purple-400" />
-                        Luma Uni-1 Model
-                      </span>
-                      <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
-                        {aspectRatio}
-                      </span>
-                    </div>
+                  {/* Top badging */}
+                  <div className="absolute top-4 left-4 flex gap-2">
+                    <span className="px-3 py-1 rounded-full bg-black/70 backdrop-blur-md border border-purple-500/40 text-[10px] font-bold text-purple-300 flex items-center gap-1">
+                      <Sparkles size={11} className="text-purple-400" />
+                      Gemini Model
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
+                      {aspectRatio}
+                    </span>
+                  </div>
 
-                    {/* Bottom overlay with prompt & download */}
-                    <div className="absolute bottom-0 inset-x-0 p-5 space-y-2">
-                      <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed">
-                        {profile.postCaption}
-                      </p>
-                      <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[11px]">
-                        <span className="text-slate-400 font-mono">Format: High-Res WebP / JPEG</span>
-                        <a
-                          href={profile.imageUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          download="luma-influencer-uni1.jpg"
-                          className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer"
-                        >
-                          View Full Resolution ↗
-                        </a>
-                      </div>
+                  {/* Bottom overlay with prompt & download */}
+                  <div className="absolute bottom-0 inset-x-0 p-5 space-y-2">
+                    <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed">
+                      {profile.postCaption}
+                    </p>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[11px]">
+                      <span className="text-slate-400 font-mono">Format: High-Res WebP / JPEG</span>
+                      <a
+                        href={profile.imageUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        download="gemini-influencer.jpg"
+                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer"
+                      >
+                        View Full Resolution ↗
+                      </a>
                     </div>
                   </div>
-                )}
-
-                {activeMediaTab === "video" && (
-                  <div className="relative rounded-2xl overflow-hidden aspect-[4/5] max-h-[460px] bg-slate-900 border border-pink-500/30 group shadow-2xl mx-auto w-full flex items-center justify-center">
-                    {profile.videoUrl ? (
-                      <video
-                        ref={videoRef}
-                        src={profile.videoUrl}
-                        controls
-                        autoPlay
-                        loop
-                        muted
-                        playsInline
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-center p-8 space-y-2">
-                        <Zap size={32} className="text-pink-400 mx-auto" />
-                        <p className="text-sm font-bold text-white">Video Model Rendering</p>
-                        <p className="text-xs text-slate-400">Click &apos;Generate Influencer&apos; with Video Mode selected.</p>
-                      </div>
-                    )}
-                    
-                    {/* Top video badging */}
-                    <div className="absolute top-4 left-4 flex gap-2 pointer-events-none">
-                      <span className="px-3 py-1 rounded-full bg-black/80 backdrop-blur-md border border-pink-500/40 text-[10px] font-bold text-pink-300 flex items-center gap-1">
-                        <Sparkles size={11} className="text-pink-400" />
-                        Luma Ray-3.2 Video Model
-                      </span>
-                      <span className="px-2.5 py-1 rounded-full bg-black/80 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
-                        720p • 5s Loop
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {activeMediaTab === "split" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Image Column */}
-                    <div className="relative rounded-2xl overflow-hidden aspect-[4/5] bg-slate-900 border border-purple-500/30 shadow-lg group">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={profile.imageUrl}
-                        alt="Luma Uni-1 Image"
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-purple-500/40 text-[10px] font-bold text-purple-300 flex items-center gap-1">
-                        <Sparkles size={10} />
-                        Uni-1 Image
-                      </div>
-                    </div>
-
-                    {/* Video Column */}
-                    <div className="relative rounded-2xl overflow-hidden aspect-[4/5] bg-slate-900 border border-pink-500/30 shadow-lg">
-                      {profile.videoUrl && (
-                        <video
-                          src={profile.videoUrl}
-                          controls
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/75 backdrop-blur-md border border-pink-500/40 text-[10px] font-bold text-pink-300 flex items-center gap-1 pointer-events-none">
-                        <Sparkles size={10} />
-                        Ray-3.2 Video
-                      </div>
-                    </div>
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Bottom Tags and Metadata footer */}
@@ -921,7 +737,7 @@ export default function InteractiveInfluencerGenerator() {
                   ))}
                 </div>
                 <div className="text-[11px] text-slate-500 font-mono">
-                  Engine: REST /v1/generations
+                  Engine: Google Gemini
                 </div>
               </div>
             </div>

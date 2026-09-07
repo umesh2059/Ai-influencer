@@ -193,7 +193,7 @@ export default function DashboardPage() {
   const [settingsEmail, setSettingsEmail] = useState("");
   const [apiKeyOpenAI, setApiKeyOpenAI] = useState("••••••••••••••••••••••••");
   const [apiKeyMidjourney, setApiKeyMidjourney] = useState("••••••••••••••••••••••••");
-  const [apiKeyLuma, setApiKeyLuma] = useState("");
+  const [apiKeyGemini, setApiKeyGemini] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
@@ -215,8 +215,8 @@ export default function DashboardPage() {
       });
       setSettingsName(user.user_metadata?.full_name || user.user_metadata?.name || "");
       setSettingsEmail(user.email || "");
-      const savedLuma = localStorage.getItem("luma_agents_api_key");
-      if (savedLuma) setApiKeyLuma(savedLuma);
+      const savedGemini = localStorage.getItem("gemini_api_key");
+      if (savedGemini) setApiKeyGemini(savedGemini);
       setProfileLoading(false);
 
       // Background profile sync
@@ -338,31 +338,37 @@ export default function DashboardPage() {
     setHasGenerated(false);
     setGenerationModelStep(0);
 
-    const lumaPrompt = `Photorealistic 8k studio portrait and full-body composition of a virtual influencer named ${newModelName}. Features: ${newModelGender}, ${newModelBodyType} anatomy, ${newModelSkinTone} skin tone, ${newModelAgeRange}, ${newModelHairStyle} hair, and ${newModelEyeColor} eyes. Luma Uni-1 photorealistic render, studio softbox lighting, 8k resolution.`;
+    const basePersona = `virtual influencer named ${newModelName}. Features: ${newModelGender}, ${newModelBodyType} anatomy, ${newModelSkinTone} skin tone, ${newModelAgeRange}, ${newModelHairStyle} hair, and ${newModelEyeColor} eyes. Photorealistic render, studio softbox lighting, 8k resolution.`;
+    const portraitPrompt = `Photorealistic 8k studio close-up portrait of a ${basePersona}`;
+    const fullBodyPrompt = `Photorealistic 8k studio full-body composition of a ${basePersona}`;
 
     let generatedPortraitUrl = "";
     let generatedFullBodyUrl = "";
 
     try {
-      const res = await fetch("/api/luma/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: lumaPrompt,
-          aspect_ratio: "1:1",
-          type: "both",
-          apiKey: apiKeyLuma.trim() || undefined,
+      const geminiKey = apiKeyGemini.trim() || undefined;
+      const [portraitRes, fullBodyRes] = await Promise.all([
+        fetch("/api/gemini/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: portraitPrompt, aspect_ratio: "1:1", apiKey: geminiKey }),
         }),
-      });
-      const data = await res.json();
-      if (data.imageGeneration?.output?.[0]?.url) {
-        generatedPortraitUrl = data.imageGeneration.output[0].url;
+        fetch("/api/gemini/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: fullBodyPrompt, aspect_ratio: "3:4", apiKey: geminiKey }),
+        }),
+      ]);
+      const portraitData = await portraitRes.json();
+      const fullBodyData = await fullBodyRes.json();
+      if (portraitData.imageGeneration?.output?.[0]?.url) {
+        generatedPortraitUrl = portraitData.imageGeneration.output[0].url;
       }
-      if (data.videoGeneration?.output?.[0]?.url) {
-        generatedFullBodyUrl = data.videoGeneration.output[0].url;
+      if (fullBodyData.imageGeneration?.output?.[0]?.url) {
+        generatedFullBodyUrl = fullBodyData.imageGeneration.output[0].url;
       }
     } catch (e) {
-      console.error("Luma Uni-1 generation error:", e);
+      console.error("Gemini generation error:", e);
     }
 
     // Simulate step progress
@@ -403,8 +409,8 @@ export default function DashboardPage() {
       })
       .eq("id", user!.id);
 
-    if (apiKeyLuma.trim()) {
-      localStorage.setItem("luma_agents_api_key", apiKeyLuma.trim());
+    if (apiKeyGemini.trim()) {
+      localStorage.setItem("gemini_api_key", apiKeyGemini.trim());
     }
 
     if (!error) {
@@ -1202,7 +1208,7 @@ export default function DashboardPage() {
                         disabled={isGeneratingModel}
                         className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:scale-[1.02] active:scale-[0.98] disabled:scale-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 text-sm font-semibold text-white shadow-lg shadow-purple-600/20 hover:shadow-purple-600/35 cursor-pointer flex items-center gap-2"
                       >
-                        <Sparkles size={16} /> Generate Influencer with Luma Uni-1 (-50 Credits)
+                        <Sparkles size={16} /> Generate Influencer with Gemini (-50 Credits)
                       </button>
                     </div>
                   </div>
@@ -1227,10 +1233,10 @@ export default function DashboardPage() {
                             <h4 className="font-bold text-white text-base">Synthesizing Persona</h4>
                             <p className="text-xs text-purple-400 font-semibold h-4 transition-all duration-300">
                               {[
-                                "Connecting to Luma Uni-1 generation pipeline...",
+                                "Connecting to Google Gemini generation pipeline...",
                                 "Formulating facial topology mapping...",
                                 "Calibrating diffuse and specular lighting...",
-                                "Synthesizing skin shaders & pigmentation with Uni-1...",
+                                "Synthesizing skin shaders & pigmentation with Gemini...",
                                 "Finalizing high-fidelity rendering..."
                               ][generationModelStep]}
                             </p>
@@ -1764,19 +1770,19 @@ export default function DashboardPage() {
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wide">
-                      Luma Agents API Key (Uni-1 & Ray-3.2)
+                      Google Gemini API Key
                     </label>
                     <span className="text-[10px] text-emerald-400 font-semibold">Active Engine</span>
                   </div>
                   <input
                     type="password"
-                    placeholder="luma-api-..."
-                    value={apiKeyLuma}
-                    onChange={(e) => setApiKeyLuma(e.target.value)}
+                    placeholder="AIza..."
+                    value={apiKeyGemini}
+                    onChange={(e) => setApiKeyGemini(e.target.value)}
                     className="w-full bg-slate-900/50 border border-slate-800 focus:border-purple-500/80 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none transition-all duration-300 font-mono"
                   />
                   <p className="text-[10px] text-slate-500">
-                    Powers Luma Uni-1 for photorealistic influencer image generation and Ray-3.2 for 720p cinematic video models.
+                    Powers Google Gemini for photorealistic influencer image generation.
                   </p>
                 </div>
               </div>
