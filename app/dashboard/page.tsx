@@ -6,7 +6,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
 import {
   Sparkles,
-  Calendar,
+  Calendars,
   Analytics,
   Users,
   Globe,
