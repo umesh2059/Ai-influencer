@@ -171,7 +171,9 @@ export default function DashboardPage() {
   const [newModelAgeRange, setNewModelAgeRange] = useState("Gen Z (18-24)");
   const [newModelHairStyle, setNewModelHairStyle] = useState("Straight");
   const [newModelEyeColor, setNewModelEyeColor] = useState("Brown");
+  const [newModelCustomPrompt, setNewModelCustomPrompt] = useState("");
   const [formError, setFormError] = useState("");
+  const [generationNotice, setGenerationNotice] = useState("");
 
   // Model generation preview states
   const [isGeneratingModel, setIsGeneratingModel] = useState(false);
@@ -334,13 +336,18 @@ export default function DashboardPage() {
     }
 
     setFormError("");
+    setGenerationNotice("");
     setIsGeneratingModel(true);
     setHasGenerated(false);
     setGenerationModelStep(0);
 
-    const basePersona = `virtual influencer named ${newModelName}. Features: ${newModelGender}, ${newModelBodyType} anatomy, ${newModelSkinTone} skin tone, ${newModelAgeRange}, ${newModelHairStyle} hair, and ${newModelEyeColor} eyes. Photorealistic render, studio softbox lighting, 8k resolution.`;
-    const portraitPrompt = `Photorealistic 8k studio close-up portrait of a ${basePersona}`;
-    const fullBodyPrompt = `Photorealistic 8k studio full-body composition of a ${basePersona}`;
+    // A custom prompt describes the scene/outfit, so drop the default studio setting
+    const customDetails = newModelCustomPrompt.trim();
+    const setting = customDetails ? "" : "studio ";
+    const lighting = customDetails ? "natural lighting that matches the scene" : "studio softbox lighting";
+    const basePersona = `virtual influencer named ${newModelName}. Features: ${newModelGender}, ${newModelBodyType} anatomy, ${newModelSkinTone} skin tone, ${newModelAgeRange}, ${newModelHairStyle} hair, and ${newModelEyeColor} eyes.${customDetails ? ` Scene, outfit and styling: ${customDetails}.` : ""} Photorealistic render, ${lighting}, 8k resolution.`;
+    const portraitPrompt = `Photorealistic 8k ${setting}close-up portrait of a ${basePersona}`;
+    const fullBodyPrompt = `Photorealistic 8k ${setting}full-body composition of a ${basePersona}`;
 
     let generatedPortraitUrl = "";
     let generatedFullBodyUrl = "";
@@ -367,8 +374,20 @@ export default function DashboardPage() {
       if (fullBodyData.imageGeneration?.output?.[0]?.url) {
         generatedFullBodyUrl = fullBodyData.imageGeneration.output[0].url;
       }
+
+      if (portraitData.isSimulated) {
+        setGenerationNotice("No Gemini API key is set, so these are sample images. Add your key in Settings to generate images from your options and prompt.");
+      } else if (portraitData.error || fullBodyData.error) {
+        const apiError: string = portraitData.error || fullBodyData.error;
+        setGenerationNotice(
+          /quota|rate.?limit|429/i.test(apiError)
+            ? "Your Gemini API key has no image-generation quota left. Enable billing in Google AI Studio or try again later. Sample images are shown instead."
+            : `Gemini couldn't generate every image (${apiError.slice(0, 160)}). Sample images are shown instead.`
+        );
+      }
     } catch (e) {
       console.error("Gemini generation error:", e);
+      setGenerationNotice("Couldn't reach the image generator. Sample images are shown instead.");
     }
 
     // Simulate step progress
@@ -1200,6 +1219,49 @@ export default function DashboardPage() {
                           })}
                         </div>
                       </div>
+
+                      {/* Custom Prompt */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                            Custom Prompt <span className="normal-case tracking-normal font-medium text-slate-600">(optional)</span>
+                          </label>
+                          <span className="text-[10px] text-slate-600">{newModelCustomPrompt.length}/500</span>
+                        </div>
+                        <textarea
+                          rows={3}
+                          maxLength={500}
+                          placeholder="Describe anything extra, e.g. wearing a red leather jacket, standing on a neon-lit Tokyo street at night"
+                          value={newModelCustomPrompt}
+                          onChange={(e) => setNewModelCustomPrompt(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800/80 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-purple-500/50 transition-colors resize-none"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            "Streetwear outfit in a neon city at night",
+                            "Summer dress on a sunny beach",
+                            "Athletic wear in a modern gym",
+                            "Business suit in a glass office",
+                            "Cozy sweater in a café",
+                          ].map((idea) => (
+                            <button
+                              key={idea}
+                              type="button"
+                              onClick={() =>
+                                setNewModelCustomPrompt((prev) =>
+                                  (prev.trim() ? `${prev.trim()}, ${idea.toLowerCase()}` : idea).slice(0, 500)
+                                )
+                              }
+                              className="px-3 py-1.5 rounded-full border border-slate-900 bg-slate-950/40 text-[11px] font-medium text-slate-400 hover:text-white hover:border-purple-500/40 transition-all duration-300 cursor-pointer"
+                            >
+                              + {idea}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                          Your prompt is combined with the options above, so the face and features stay consistent.
+                        </p>
+                      </div>
                     </div>
 
                     <div className="pt-4 border-t border-slate-900/80 flex justify-end">
@@ -1260,6 +1322,12 @@ export default function DashboardPage() {
                             <p className="text-slate-500 text-xs mt-0.5">{newModelGender} | {newModelAgeRange}</p>
                           </div>
 
+                          {generationNotice && (
+                            <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-500/20 text-amber-400 text-xs leading-relaxed">
+                              {generationNotice}
+                            </div>
+                          )}
+
                           {/* Dual image preview */}
                           <div className="grid grid-cols-2 gap-4">
                             {/* Portrait Face image */}
@@ -1292,6 +1360,12 @@ export default function DashboardPage() {
                             <div className="flex justify-between"><span className="text-slate-500">Skin Tone:</span> <span className="text-slate-300 font-bold">{newModelSkinTone}</span></div>
                             <div className="flex justify-between"><span className="text-slate-500">Hair Style:</span> <span className="text-slate-300 font-bold">{newModelHairStyle}</span></div>
                             <div className="flex justify-between"><span className="text-slate-500">Eye Color:</span> <span className="text-slate-300 font-bold">{newModelEyeColor}</span></div>
+                            {newModelCustomPrompt.trim() && (
+                              <div className="pt-1.5 mt-1.5 border-t border-slate-900">
+                                <span className="text-slate-500">Prompt:</span>{" "}
+                                <span className="text-slate-300">{newModelCustomPrompt.trim()}</span>
+                              </div>
+                            )}
                           </div>
 
                           {/* Roster save buttons */}
@@ -1317,6 +1391,7 @@ export default function DashboardPage() {
 
                                 setModelsList([newModel, ...modelsList]);
                                 setNewModelName("");
+                                setNewModelCustomPrompt("");
                                 setStudioView("landing");
                                 setHasGenerated(false);
                                 setGeneratedPortrait("");

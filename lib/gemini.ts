@@ -27,6 +27,11 @@ export interface GeminiImageResponse {
   candidates: Array<{
     content: {
       parts: Array<{
+        // The REST API responds in camelCase; snake_case kept for compatibility
+        inlineData?: {
+          mimeType: string;
+          data: string;
+        };
         inline_data?: {
           mime_type: string;
           data: string;
@@ -90,11 +95,13 @@ export async function submitGeminiGeneration(
 
   const data: GeminiImageResponse = await response.json();
 
-  const imageData = data.candidates?.[0]?.content?.parts?.find(
-    (part) => part.inline_data?.data
+  const imagePart = data.candidates?.[0]?.content?.parts?.find(
+    (part) => part.inlineData?.data || part.inline_data?.data
   );
+  const imageBase64 = imagePart?.inlineData?.data || imagePart?.inline_data?.data;
+  const imageMimeType = imagePart?.inlineData?.mimeType || imagePart?.inline_data?.mime_type || "image/png";
 
-  if (!imageData?.inline_data?.data) {
+  if (!imageBase64) {
     throw new Error("No image generated in response");
   }
 
@@ -105,7 +112,7 @@ export async function submitGeminiGeneration(
     state: "completed",
     output: [
       {
-        url: `data:${imageData.inline_data.mime_type};base64,${imageData.inline_data.data}`,
+        url: `data:${imageMimeType};base64,${imageBase64}`,
       },
     ],
     model,
