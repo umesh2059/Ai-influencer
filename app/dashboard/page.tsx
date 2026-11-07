@@ -352,18 +352,29 @@ export default function DashboardPage() {
     let generatedPortraitUrl = "";
     let generatedFullBodyUrl = "";
 
+    // Animate the progress steps while the images are generating (not after)
+    const progressAnimation = (async () => {
+      for (let i = 0; i < 5; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        setGenerationModelStep(i);
+      }
+    })();
+
     try {
       const geminiKey = apiKeyGemini.trim() || undefined;
+      // Give up after 90s so the spinner can never hang forever
       const [portraitRes, fullBodyRes] = await Promise.all([
         fetch("/api/gemini/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: portraitPrompt, aspect_ratio: "1:1", apiKey: geminiKey }),
+          signal: AbortSignal.timeout(90000),
         }),
         fetch("/api/gemini/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ prompt: fullBodyPrompt, aspect_ratio: "3:4", apiKey: geminiKey }),
+          signal: AbortSignal.timeout(90000),
         }),
       ]);
       const portraitData = await portraitRes.json();
@@ -387,14 +398,14 @@ export default function DashboardPage() {
       }
     } catch (e) {
       console.error("Gemini generation error:", e);
-      setGenerationNotice("Couldn't reach the image generator. Sample images are shown instead.");
+      setGenerationNotice(
+        e instanceof DOMException && e.name === "TimeoutError"
+          ? "Image generation took longer than 90 seconds and was stopped. Sample images are shown instead."
+          : "Couldn't reach the image generator. Sample images are shown instead."
+      );
     }
 
-    // Simulate step progress
-    for (let i = 0; i < 5; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      setGenerationModelStep(i);
-    }
+    await progressAnimation;
 
     const genderKey = (newModelGender === "Female" || newModelGender === "Male" || newModelGender === "Non-Binary")
       ? newModelGender
@@ -406,9 +417,10 @@ export default function DashboardPage() {
 
     setGeneratedPortrait(generatedPortraitUrl || randomPortrait);
     setGeneratedFullBody(generatedFullBodyUrl || randomFullBody);
-    await deductCredits(50);
     setHasGenerated(true);
     setIsGeneratingModel(false);
+    // Saved in the background: a slow database must not keep the result hidden
+    deductCredits(50);
   };
 
   const handleSignOut = () => {

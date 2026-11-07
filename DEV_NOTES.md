@@ -18,6 +18,8 @@ For the overall architecture, see [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATI
 8. [How these were tested](#8-how-these-were-tested)
 9. [Lessons & debugging checklist](#9-lessons--debugging-checklist)
 10. [Open to-dos](#10-open-to-dos)
+11. [Bug: Image generation stuck "forever" (Supabase auth deadlock)](#11-bug-image-generation-stuck-forever-supabase-auth-deadlock)
+12. [Bug: Red "Console Error" popup for Gemini quota errors](#12-bug-red-console-error-popup-for-gemini-quota-errors)
 
 ---
 
@@ -382,3 +384,207 @@ The app now shows this situation itself (see [section 4](#4-feature-clear-messag
 - **Saved models are not persisted.** `modelsList` lives in React state, so models disappear on page reload. They could be saved to Supabase.
 - **Generated images are base64 strings.** They'd need uploading to storage (e.g. Supabase Storage) to be kept long-term.
 - Tailwind shows "canonical class" hints (e.g. `bg-gradient-to-r` can be written as `bg-linear-to-r`). These are only style suggestions, not errors.
+
+---
+
+## 11. Bug: Image generation stuck "forever" (Supabase auth deadlock)
+
+### Symptom
+
+With a real (registered) account, clicking **Generate Influencer with Gemini** showed the "Synthesizing Persona" spinner for a very long time, and the result never appeared.
+
+### Step 1: Is Gemini slow? (No)
+
+A test script called Gemini directly with the project's key and timed every call:
+
+| Model | Result | Time |
+|---|---|---|
+| `gemini-2.5-flash-image` | 429 quota exceeded | 0.4 s |
+| `gemini-3.1-flash-lite-image` | 429 quota exceeded | 0.4 s |
+| `gemini-3.1-flash-image` | 429 quota exceeded | 0.3 s |
+| `gemini-3-pro-image` | 429 quota exceeded | 0.3 s |
+
+The key is valid (listing models works), but it has **no image quota on any model**. Gemini rejects instantly, so the long wait had to be somewhere in **our** code.
+
+### Step 2: What runs after the API call?
+
+```tsx
+setGeneratedFullBody(...);
+await deductCredits(50);   // ← waits for a Supabase database update
+setHasGenerated(true);     // ← result only shown AFTER that finishes
+setIsGeneratingModel(false);
+```
+
+`deductCredits` updates the `profiles` table in Supabase. For the **demo user** it returns early, which is why the earlier demo-user test didn't catch this. For **real users**, it waits for Supabase, with no timeout.
+
+Supabase itself was healthy (REST and auth both answered in about 0.5 s). So why would the request never finish?
+
+### Step 3: Root cause: a deadlock in `components/AuthProvider.tsx`
+
+```tsx
+// BEFORE
+supabase.auth.onAuthStateChange(async (event, session) => {
+  ...
+  if (event === "SIGNED_IN" && session?.user) {
+    await upsertProfile(session.user);   // ❌ Supabase call INSIDE the auth callback
+  }
+});
+```
+
+How the deadlock happens:
+
+1. When you register or log in, Supabase fires `SIGNED_IN` and runs this callback **while holding its internal auth lock**.
+2. `upsertProfile` calls `supabase.from("profiles")...`. Every query first asks the auth system for the current session, which needs **the same lock**.
+3. The callback waits for the query, and the query waits for the lock that the callback holds. **Neither can ever finish.**
+4. From then on, **every Supabase request in that tab hangs**, including `deductCredits`. So the spinner never goes away.
+
+> **What is a deadlock?** Two tasks each waiting for the other to finish first. Like two people at a door both saying "after you" forever.
+
+That's also why the project already had workarounds such as a 2-second timeout on `getSession()` and the "Taking longer than expected?" reset button. They treated the symptom; this fixes the cause. Supabase's own docs warn: *don't call other Supabase functions inside `onAuthStateChange`; defer them with `setTimeout`.*
+
+### The fixes
+
+**Fix 1: Defer the Supabase call** (`components/AuthProvider.tsx`). This is the actual root-cause fix:
+
+```tsx
+// AFTER
+supabase.auth.onAuthStateChange((event, session) => {   // no longer async
+  ...
+  if ((event === "SIGNED_IN" || event === "USER_UPDATED") && session?.user) {
+    const signedInUser = session.user;
+    setTimeout(() => {
+      upsertProfile(signedInUser);   // ✅ runs AFTER the callback has released the lock
+    }, 0);
+  }
+});
+```
+
+`setTimeout(fn, 0)` means "run this as soon as the current work is finished". By then the auth callback has returned and released its lock, so the query can run.
+
+**Fix 2: Don't keep the result hidden behind the database** (`app/dashboard/page.tsx`):
+
+```tsx
+setHasGenerated(true);
+setIsGeneratingModel(false);
+// Saved in the background: a slow database must not keep the result hidden
+deductCredits(50);       // no "await"
+```
+
+The local credit count still updates instantly (`deductCredits` calls `setProfile` first). Only the database save happens in the background.
+
+**Fix 3: Timeouts on every network wait**, so nothing can hang forever again:
+
+| Where | Timeout | What the user sees if it's hit |
+|---|---|---|
+| Browser → `/api/gemini/generate` (`page.tsx`) | 90 s (`AbortSignal.timeout(90000)`) | "Image generation took longer than 90 seconds and was stopped…" |
+| Server → Google Gemini (`lib/gemini.ts`) | 80 s (`AbortSignal.timeout(80000)`) | Route returns an error, which shows the "couldn't generate" notice |
+
+The server timeout is shorter than the browser's so the server gives up first and can send back a proper error message.
+
+**Fix 4: Progress animation runs *during* generation, not after.** Before, the 5 progress steps (5 × 600 ms = 3 s) started only **after** the images came back, which added 3 s of pure waiting. Now the animation starts at the same time as the requests:
+
+```tsx
+const progressAnimation = (async () => {
+  for (let i = 0; i < 5; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setGenerationModelStep(i);
+  }
+})();                       // starts immediately, not awaited yet
+
+// ... fetch both images ...
+
+await progressAnimation;    // wait only for whatever time is left
+```
+
+Total time is now *max(generation, 3 s)* instead of *generation + 3 s*.
+
+### Result
+
+Browser test (dev server, Custom Prompt "Summer dress on a sunny beach"): the result panel appeared after **3.2 s**, with the quota notice explaining why sample images are shown.
+
+### Why you still won't see real AI images
+
+The key has **0 image quota** (see [section 6](#6-known-issue-gemini-api-key-has-no-image-quota)). The code is ready; to get real images, enable **billing** for the key's project in Google AI Studio (aistudio.google.com), or use a key with image quota. With billing on, real images normally take about 5–30 seconds.
+
+### Lessons
+
+- **Test with a real account too.** The demo user skipped the database path, so the bug was invisible in that test.
+- **Never `await` a Supabase call inside `onAuthStateChange`.** Defer it with `setTimeout(..., 0)`.
+- **Every network call needs a timeout.** `fetch` waits forever by default; `AbortSignal.timeout(ms)` fixes that in one line.
+- **Measure before guessing.** Timing each step showed in seconds that Gemini was fast (it failed instantly) and the wait was in our code.
+
+---
+
+## 12. Bug: Red "Console Error" popup for Gemini quota errors
+
+### Symptom
+
+Clicking **Generate Influencer** in the landing-page generator ("Generator Arena") opened Next.js's red error popup:
+
+```
+Console Error
+You exceeded your current quota ... limit: 0, model: gemini-2.5-flash-preview-image ...
+Please retry in 22h1m3s.
+    at handleGenerate (components/InteractiveInfluencerGenerator.tsx)
+```
+
+### Two separate problems
+
+**Problem A: Google refuses the key (not a code bug).**
+`limit: 0` means the free tier allows **zero** image generations for this key. "Retry in 22h" only resets the daily counter, but the limit is still 0, so waiting won't help. The only real fix is enabling **billing** in Google AI Studio (aistudio.google.com) or using a key that has image quota. See [section 6](#6-known-issue-gemini-api-key-has-no-image-quota).
+
+**Problem B: The app handled the refusal badly (code bug).**
+
+1. `app/api/gemini/generate/route.ts` caught Google's error and returned it **as-is** with status **500** ("server crashed"), so the client got Google's 15-line raw message.
+2. `components/InteractiveInfluencerGenerator.tsx` then ran `console.error(err)`.
+3. **In development, Next.js turns every `console.error` into the red error overlay.** So an error the app was *already handling* (it falls back to a preview image and shows a notification) looked like a crash.
+
+### The fixes
+
+**Fix 1: The API route recognises quota errors** (`app/api/gemini/generate/route.ts`):
+
+```ts
+} catch (err: any) {
+  const message: string = err?.message || "";
+
+  if (/quota|rate.?limit|RESOURCE_EXHAUSTED|\b429\b/i.test(message)) {
+    console.warn("Gemini quota exceeded:", message.split("\n")[0]);
+    return NextResponse.json(
+      {
+        error: "Your Gemini API key has no image-generation quota left. Enable billing in Google AI Studio or use a different key.",
+        code: "QUOTA_EXCEEDED",
+      },
+      { status: 429 }   // 429 = "Too Many Requests", the correct status for quota
+    );
+  }
+  // ...other errors still return 500 as before
+}
+```
+
+Because this happens **in the route**, all three generators that call `/api/gemini/generate` get the short message:
+- landing page → `components/InteractiveInfluencerGenerator.tsx`
+- studio → `components/InfluencerStudio.tsx`
+- dashboard → `app/dashboard/page.tsx`
+
+**Fix 2: `console.warn` instead of `console.error` for handled failures**, in `InteractiveInfluencerGenerator.tsx` and `InfluencerStudio.tsx`:
+
+```tsx
+// console.warn, not console.error: this failure is handled below (preview image +
+// notification), and console.error would open the Next.js dev error overlay
+console.warn("Gemini generation failed:", err?.message || err);
+```
+
+### Key concept: `console.error` vs `console.warn` in Next.js dev
+
+| Call | Shows in browser console | Opens red Next.js overlay (dev only) |
+|---|---|---|
+| `console.error(...)` | ✅ | ✅ |
+| `console.warn(...)` | ✅ (yellow) | ❌ |
+
+Rule of thumb: use `console.error` for **unexpected** bugs you want to notice. Use `console.warn` for **expected** failures the UI already handles (quota limits, offline, user cancelled, …).
+
+### Testing
+
+- Direct call to `/api/gemini/generate`: **HTTP 429 in 0.46 s** with the short JSON message.
+- Browser test on the landing page: after clicking **Generate Influencer**, the pink notification appeared in about 1 s, *"Error: Your Gemini API key has no image-generation quota left… Using high-resolution preview."*, the preview image was shown, and **no red overlay** opened.
+- The browser still logs one line, `Failed to load resource: 429 (Too Many Requests)`. That's Chrome's own network log for any non-2xx response. It isn't from our code and doesn't open the overlay.

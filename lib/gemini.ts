@@ -78,6 +78,8 @@ export async function submitGeminiGeneration(
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
+      // Image generation normally takes 5-30s; stop waiting after 80s
+      signal: AbortSignal.timeout(80000),
     }
   );
 

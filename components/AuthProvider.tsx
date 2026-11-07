@@ -139,18 +139,23 @@ export default function AuthProvider({
     // Listen for auth state changes
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       try {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
 
-        // When a user signs up or signs in for the first time, save their profile
+        // When a user signs up or signs in for the first time, save their profile.
+        // Deferred with setTimeout: calling Supabase inside this callback (while it holds
+        // the auth lock) deadlocks every later Supabase request in the tab.
         if (
           (event === "SIGNED_IN" || event === "USER_UPDATED") &&
           session?.user
         ) {
-          await upsertProfile(session.user);
+          const signedInUser = session.user;
+          setTimeout(() => {
+            upsertProfile(signedInUser);
+          }, 0);
         }
       } catch (err) {
         console.error("Error in onAuthStateChange handler:", err);

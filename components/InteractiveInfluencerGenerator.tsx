@@ -312,7 +312,9 @@ export default function InteractiveInfluencerGenerator() {
     } catch (err: any) {
       clearInterval(progressInterval);
       setIsGenerating(false);
-      console.error(err);
+      // console.warn, not console.error: this failure is handled below (preview image +
+      // notification), and console.error would open the Next.js dev error overlay
+      console.warn("Gemini generation failed:", err?.message || err);
       setNotification({
         text: `Error: ${err.message || "Failed to connect to Gemini API."} Using high-resolution preview.`,
         type: "error",

@@ -313,7 +313,8 @@ export default function InfluencerStudio({ userId, credits, onUpdateCredits, isD
         geminiPortraitUrl = data.imageGeneration.output[0].url;
       }
     } catch (e) {
-      console.error("Gemini API request failed:", e);
+      // Handled with a fallback portrait below, so warn instead of opening the dev error overlay
+      console.warn("Gemini API request failed:", e);
     }
 
     // After animation, generate and deduct

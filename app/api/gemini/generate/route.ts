@@ -52,6 +52,22 @@ export async function POST(req: NextRequest) {
       imageGeneration: imageGen,
     });
   } catch (err: any) {
+    const message: string = err?.message || "";
+
+    // Quota / rate-limit errors are expected (e.g. free-tier keys have 0 image quota),
+    // so answer with a short 429 instead of Google's long raw message as a 500
+    if (/quota|rate.?limit|RESOURCE_EXHAUSTED|\b429\b/i.test(message)) {
+      console.warn("Gemini quota exceeded:", message.split("\n")[0]);
+      return NextResponse.json(
+        {
+          error:
+            "Your Gemini API key has no image-generation quota left. Enable billing in Google AI Studio or use a different key.",
+          code: "QUOTA_EXCEEDED",
+        },
+        { status: 429 }
+      );
+    }
+
     console.error("Gemini Generation Error:", err);
     return NextResponse.json(
       {
