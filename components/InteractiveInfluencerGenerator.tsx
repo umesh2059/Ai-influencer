@@ -192,6 +192,16 @@ const GEMINI_GENERATING_STEPS = [
   "Downloading high-fidelity output from Gemini... 🎉"
 ];
 
+const GEMINI_VIDEO_STEPS = [
+  "Connecting to Google Gemini video model...",
+  "Gemini: Planning shots, camera path & motion...",
+  "Gemini: Rendering frames with consistent identity...",
+  "Gemini: Adding lighting, motion blur & native audio...",
+  "Encoding MP4 video... 🎬"
+];
+
+type MediaType = "image" | "video";
+
 export default function InteractiveInfluencerGenerator() {
   const [niche, setNiche] = useState<"Fashion" | "Fitness" | "Tech & Gaming" | "Travel">("Fashion");
   const [style, setStyle] = useState<"Photorealistic" | "Cyberpunk" | "Anime/3D">("Photorealistic");
@@ -211,6 +221,34 @@ export default function InteractiveInfluencerGenerator() {
   const [profile, setProfile] = useState<InfluencerProfile>(INFLUENCER_DB.Fashion.Photorealistic);
   const [isLiveGeminiOutput, setIsLiveGeminiOutput] = useState(false);
   const [notification, setNotification] = useState<{ text: string; type: "success" | "info" | "error" } | null>(null);
+
+  // Video mode
+  const [mediaType, setMediaType] = useState<MediaType>("image");
+  const [videoDuration, setVideoDuration] = useState<5 | 10 | 15>(5);
+  const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null);
+  const [videoLoadFailed, setVideoLoadFailed] = useState(false);
+
+  // Free the previous video's memory whenever it's replaced or the component unmounts
+  useEffect(() => {
+    return () => {
+      if (generatedVideoUrl) URL.revokeObjectURL(generatedVideoUrl);
+    };
+  }, [generatedVideoUrl]);
+
+  // A generated video belongs to the current niche/style; clear it when they change
+  useEffect(() => {
+    setGeneratedVideoUrl(null);
+  }, [niche, style]);
+
+  // Video model supports 9:16 and 16:9 only
+  useEffect(() => {
+    if (mediaType === "video" && aspectRatio === "1:1") setAspectRatio("9:16");
+  }, [mediaType, aspectRatio]);
+
+  const videoSrc = generatedVideoUrl || profile.videoUrl;
+  useEffect(() => {
+    setVideoLoadFailed(false);
+  }, [videoSrc]);
 
   // Initialize and update default prompt when selections change
   useEffect(() => {
@@ -235,7 +273,95 @@ export default function InteractiveInfluencerGenerator() {
     }
   };
 
+  const handleGenerateVideo = async () => {
+    setIsGenerating(true);
+    setGenerationStep(0);
+    setProgress(3);
+    setStatusMessage(GEMINI_VIDEO_STEPS[0]);
+    setNotification(null);
+
+    // Videos take much longer than images, so the bar moves slowly and stops at 92%
+    const progressInterval = setInterval(() => {
+      setProgress((prev) => {
+        if (prev >= 92) return prev;
+        const next = prev + 1;
+        const stepIdx = Math.min(
+          Math.floor((next / 100) * GEMINI_VIDEO_STEPS.length),
+          GEMINI_VIDEO_STEPS.length - 1
+        );
+        setGenerationStep(stepIdx);
+        setStatusMessage(GEMINI_VIDEO_STEPS[stepIdx]);
+        return next;
+      });
+    }, 1500);
+
+    // If the current image is a real generated one (a data URL), animate it
+    const referenceImage = profile.imageUrl.startsWith("data:image/") ? profile.imageUrl : undefined;
+
+    try {
+      const response = await fetch("/api/gemini/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `${userPrompt.trim()} Smooth cinematic camera movement, natural body motion, social-media ready clip.`,
+          aspect_ratio: aspectRatio === "16:9" ? "16:9" : "9:16",
+          duration: videoDuration,
+          apiKey: apiKey.trim() || undefined,
+          reference_image: referenceImage,
+        }),
+        signal: AbortSignal.timeout(300000),
+      });
+
+      const contentType = response.headers.get("Content-Type") || "";
+
+      if (response.ok && contentType.startsWith("video/")) {
+        // The route returns the MP4 bytes; turn them into a URL the <video> tag can play
+        const blob = await response.blob();
+        setGeneratedVideoUrl(URL.createObjectURL(blob));
+        setIsLiveGeminiOutput(true);
+        setNotification({
+          text: referenceImage
+            ? "Your generated image was animated into a video with Gemini!"
+            : "Successfully generated an influencer video with Gemini!",
+          type: "success",
+        });
+      } else {
+        const data = await response.json();
+        setGeneratedVideoUrl(null);
+        setIsLiveGeminiOutput(false);
+        if (data.isSimulated) {
+          setNotification({
+            text: "Demo Preview: Set your GEMINI_API_KEY to generate real videos. Showing a sample preview.",
+            type: "info",
+          });
+        } else {
+          setNotification({
+            text: `Error: ${data.error || "Video generation failed."} Showing a sample preview.`,
+            type: "error",
+          });
+        }
+      }
+    } catch (err: any) {
+      // console.warn: handled here with a fallback preview (console.error opens the dev overlay)
+      console.warn("Gemini video generation failed:", err?.message || err);
+      setGeneratedVideoUrl(null);
+      setNotification({
+        text:
+          err?.name === "TimeoutError"
+            ? "Video generation took longer than 5 minutes and was stopped. Try a shorter video."
+            : "Error: Couldn't reach the video generator. Showing a sample preview.",
+        type: "error",
+      });
+    } finally {
+      clearInterval(progressInterval);
+      setProgress(100);
+      setIsGenerating(false);
+    }
+  };
+
   const handleGenerate = async () => {
+    if (mediaType === "video") return handleGenerateVideo();
+
     setIsGenerating(true);
     setGenerationStep(0);
     setProgress(5);
@@ -343,7 +469,7 @@ export default function InteractiveInfluencerGenerator() {
           </h2>
           <p className="text-base md:text-lg text-slate-400 leading-relaxed">
             Select creator attributes, tune visual parameters, and formulate tailored prompts.
-            Our Gemini-powered architecture delivers photorealistic influencer images.
+            Our Gemini-powered architecture delivers photorealistic influencer images and videos.
           </p>
         </div>
 
@@ -479,7 +605,7 @@ export default function InteractiveInfluencerGenerator() {
                     Aspect Ratio
                   </h3>
                   <div className="flex gap-1.5">
-                    {(["9:16", "1:1", "16:9"] as const).map((ar) => (
+                    {(mediaType === "video" ? (["9:16", "16:9"] as const) : (["9:16", "1:1", "16:9"] as const)).map((ar) => (
                       <button
                         key={ar}
                         onClick={() => !isGenerating && setAspectRatio(ar)}
@@ -496,6 +622,41 @@ export default function InteractiveInfluencerGenerator() {
                   </div>
                 </div>
               </div>
+
+              {/* Video length (video mode only) */}
+              {mediaType === "video" && (
+                <div className="animate-fadeIn">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-1.5">
+                      <span className="w-4 h-4 rounded bg-rose-500/20 flex items-center justify-center text-rose-400 text-[10px]">🎬</span>
+                      Video Length
+                    </h3>
+                    <span className="text-[10px] text-slate-500 font-mono">Longer = slower to generate</span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {([5, 10, 15] as const).map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => !isGenerating && setVideoDuration(d)}
+                        disabled={isGenerating}
+                        className={`flex-1 py-2 rounded-xl border text-xs font-mono font-bold transition-all cursor-pointer ${
+                          videoDuration === d
+                            ? "bg-rose-600/20 border-rose-500 text-rose-200 shadow-sm"
+                            : "bg-slate-900/50 border-slate-800 text-slate-400 hover:border-slate-700"
+                        }`}
+                      >
+                        {d}s
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-500 mt-1.5">
+                    {profile.imageUrl.startsWith("data:image/")
+                      ? "✨ Your generated image will be animated into the video."
+                      : "Tip: generate an image first, then switch to Video to animate it."}
+                  </p>
+                </div>
+              )}
 
               {/* Step 4: User Selection Prompt Area */}
               <div>
@@ -574,10 +735,18 @@ export default function InteractiveInfluencerGenerator() {
                 <Sparkles size={20} className={isGenerating ? "animate-spin text-white" : "animate-bounce text-yellow-300"} />
                 <div className="text-left">
                   <div className="text-sm font-extrabold leading-none">
-                    {isGenerating ? "Synthesizing with Gemini..." : "Generate Influencer"}
+                    {isGenerating
+                      ? "Synthesizing with Gemini..."
+                      : mediaType === "video"
+                      ? "Generate Influencer Video"
+                      : "Generate Influencer"}
                   </div>
                   <div className="text-[10px] font-mono text-purple-200 font-normal mt-0.5">
-                    {isGenerating ? "Processing Generation Job" : "Powered by Google Gemini"}
+                    {isGenerating
+                      ? mediaType === "video"
+                        ? "Videos can take 1-3 minutes"
+                        : "Processing Generation Job"
+                      : "Powered by Google Gemini"}
                   </div>
                 </div>
               </button>
@@ -603,7 +772,7 @@ export default function InteractiveInfluencerGenerator() {
                       Gemini Generation Pipeline
                     </span>
                     <h4 className="text-xl font-extrabold text-white mt-2">
-                      Rendering Persona Model
+                      {mediaType === "video" ? "Rendering Persona Video" : "Rendering Persona Model"}
                     </h4>
                   </div>
                   <div className="w-72 h-3 bg-slate-900 rounded-full overflow-hidden mx-auto border border-slate-800 p-0.5">
@@ -638,9 +807,24 @@ export default function InteractiveInfluencerGenerator() {
 
               {/* View Header */}
               <div className="flex bg-slate-900/80 p-1 rounded-xl border border-slate-800 text-xs">
-                <span className="px-3 py-1.5 rounded-lg font-semibold bg-purple-600 text-white shadow">
-                  📸 Image
-                </span>
+                {([
+                  { id: "image", label: "📸 Image" },
+                  { id: "video", label: "🎬 Video" },
+                ] as const).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => !isGenerating && setMediaType(m.id)}
+                    disabled={isGenerating}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                      mediaType === m.id
+                        ? "bg-purple-600 text-white shadow"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -686,16 +870,31 @@ export default function InteractiveInfluencerGenerator() {
                 </div>
               </div>
 
-              {/* Main Media Showcase (Image) */}
+              {/* Main Media Showcase (Image or Video) */}
               <div className="flex-1 flex flex-col justify-center">
                 <div className="relative rounded-2xl overflow-hidden aspect-[4/5] max-h-[460px] bg-slate-900 border border-purple-500/30 group shadow-2xl mx-auto w-full">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={profile.imageUrl}
-                    alt="Gemini Generated Influencer Image"
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+                  {mediaType === "video" && videoSrc && !videoLoadFailed ? (
+                    <video
+                      key={videoSrc}
+                      src={videoSrc}
+                      poster={profile.imageUrl}
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      controls
+                      onError={() => setVideoLoadFailed(true)}
+                      className="w-full h-full object-contain bg-black"
+                    />
+                  ) : (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={profile.imageUrl}
+                      alt="Gemini Generated Influencer Image"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
 
                   {/* Top badging */}
                   <div className="absolute top-4 left-4 flex gap-2">
@@ -706,27 +905,48 @@ export default function InteractiveInfluencerGenerator() {
                     <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
                       {aspectRatio}
                     </span>
+                    {mediaType === "video" && (
+                      <span className="px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-slate-300">
+                        {generatedVideoUrl ? `🎬 ${videoDuration}s video` : "Sample preview"}
+                      </span>
+                    )}
                   </div>
 
-                  {/* Bottom overlay with prompt & download */}
-                  <div className="absolute bottom-0 inset-x-0 p-5 space-y-2">
-                    <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed">
-                      {profile.postCaption}
-                    </p>
-                    <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[11px]">
-                      <span className="text-slate-400 font-mono">Format: High-Res WebP / JPEG</span>
-                      <a
-                        href={profile.imageUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        download="gemini-influencer.jpg"
-                        className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer"
-                      >
-                        View Full Resolution ↗
-                      </a>
+                  {/* Bottom overlay with prompt & download (hidden for video so the player controls stay usable) */}
+                  {!(mediaType === "video" && videoSrc && !videoLoadFailed) && (
+                    <div className="absolute bottom-0 inset-x-0 p-5 space-y-2">
+                      <p className="text-xs text-slate-200 line-clamp-2 leading-relaxed">
+                        {profile.postCaption}
+                      </p>
+                      <div className="flex justify-between items-center pt-2 border-t border-white/10 text-[11px]">
+                        <span className="text-slate-400 font-mono">Format: High-Res WebP / JPEG</span>
+                        <a
+                          href={profile.imageUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          download="gemini-influencer.jpg"
+                          className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white font-medium transition-colors cursor-pointer"
+                        >
+                          View Full Resolution ↗
+                        </a>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
+
+                {/* Download bar for a generated video */}
+                {mediaType === "video" && generatedVideoUrl && (
+                  <div className="flex justify-between items-center mt-3 px-1 text-[11px]">
+                    <span className="text-slate-400 font-mono">Format: MP4 · {videoDuration}s · {aspectRatio}</span>
+                    <a
+                      href={generatedVideoUrl}
+                      download="gemini-influencer-video.mp4"
+                      className="px-3 py-1 rounded-lg bg-purple-600/80 hover:bg-purple-500 text-white font-medium transition-colors cursor-pointer"
+                    >
+                      Download Video ↓
+                    </a>
+                  </div>
+                )}
               </div>
 
               {/* Bottom Tags and Metadata footer */}

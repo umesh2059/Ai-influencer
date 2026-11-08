@@ -4,7 +4,12 @@
  * Base URL: https://generativelanguage.googleapis.com/v1beta
  */
 
-const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+export const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta";
+
+/** True for Google's quota / rate-limit errors (e.g. free-tier keys with a limit of 0). */
+export function isQuotaError(message: string): boolean {
+  return /quota|rate.?limit|too.?many.?requests|RESOURCE_EXHAUSTED|\b429\b/i.test(message);
+}
 
 export interface GeminiGenerationRequest {
   prompt: string;

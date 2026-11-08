@@ -20,6 +20,7 @@ For the overall architecture, see [PROJECT_DOCUMENTATION.md](PROJECT_DOCUMENTATI
 10. [Open to-dos](#10-open-to-dos)
 11. [Bug: Image generation stuck "forever" (Supabase auth deadlock)](#11-bug-image-generation-stuck-forever-supabase-auth-deadlock)
 12. [Bug: Red "Console Error" popup for Gemini quota errors](#12-bug-red-console-error-popup-for-gemini-quota-errors)
+13. [Feature: AI video generation (Image / Video switch)](#13-feature-ai-video-generation-image--video-switch)
 
 ---
 
@@ -252,7 +253,7 @@ But the Gemini REST API **responds in camelCase**:
   "candidates": [{
     "content": {
       "parts": [{
-        "inlineData": { "mimeType": "image/png", "data": "iVBORw0KG..." }
+        "inlineData": { "mimeType": "image/png", "data": "iVBORw0KG..." }2
       }]
     }
   }]
@@ -588,3 +589,145 @@ Rule of thumb: use `console.error` for **unexpected** bugs you want to notice. U
 - Direct call to `/api/gemini/generate`: **HTTP 429 in 0.46 s** with the short JSON message.
 - Browser test on the landing page: after clicking **Generate Influencer**, the pink notification appeared in about 1 s, *"Error: Your Gemini API key has no image-generation quota left… Using high-resolution preview."*, the preview image was shown, and **no red overlay** opened.
 - The browser still logs one line, `Failed to load resource: 429 (Too Many Requests)`. That's Chrome's own network log for any non-2xx response. It isn't from our code and doesn't open the overlay.
+
+---
+
+## 13. Feature: AI video generation (Image / Video switch)
+
+### Before
+
+There was **no video generation at all**. The generator's data had a `videoUrl` for each style (stock clips from mixkit.co), but nothing used it, and the "📸 Image" badge in the preview header was just a label. (Those stock clips now return **403 Forbidden**, so they can't be relied on.)
+
+### Research: which Google model makes videos?
+
+| Model | Status (Nov 2026) |
+|---|---|
+| Veo 2 / Veo 3 / Veo 3.1 (`predictLongRunning`) | **Shut down** in the Gemini API on Oct 22, 2026. Calling them returns `404 NOT_FOUND`. |
+| **Gemini Omni Flash** (`gemini-omni-1.2-flash`) | ✅ Current video model, used through the **Interactions API** |
+
+Testing the project key against Omni Flash returned:
+
+```
+429 too_many_requests: Rate limit exceeded for model gemini-omni-1.2-flash
+(limit: 0 requests per day on Free Tier)
+```
+
+So, just like images, **video needs billing enabled** on the key. The code is built for the real API and shows a clear message until then.
+
+> 💡 **Lesson:** AI APIs change fast. Always check the provider's *current* docs and test with a real call before writing code. Code written for Veo would have failed with 404.
+
+### How it works
+
+```
+Browser (InteractiveInfluencerGenerator.tsx)
+  │  user picks 🎬 Video, length (5/10/15s), 9:16 or 16:9, writes prompt
+  │  POST /api/gemini/video  { prompt, aspect_ratio, duration, apiKey?, reference_image? }
+  ▼
+Server route (app/api/gemini/video/route.ts)
+  │  • no key           → { isSimulated: true }            (JSON)
+  │  • calls generateGeminiVideo()
+  │  • success          → raw MP4 bytes, Content-Type: video/mp4
+  │  • quota            → 429 { code: "QUOTA_EXCEEDED" }   (JSON)
+  │  • model missing    → 503 { code: "MODEL_UNAVAILABLE" }
+  │  • too slow         → 504 { code: "TIMEOUT" }
+  ▼
+lib/gemini-video.ts
+     POST https://generativelanguage.googleapis.com/v1beta/interactions
+     header  x-goog-api-key: <key>
+     body    { model: "gemini-omni-1.2-flash",
+               input: "<prompt>"  OR  [ {type:"image", data, mime_type}, {type:"text", text} ],
+               response_format: { type: "video", aspect_ratio: "9:16", duration: "5s", resolution: "720p" } }
+     answer  steps[] → step.type "model_output" → content[] → { type: "video", data: <base64 MP4> }
+```
+
+### New files
+
+**`lib/gemini-video.ts`**
+- `generateGeminiVideo(params, apiKey)` builds the request, calls Google, finds the video inside the response, and returns it as a `Buffer`.
+- **Image-to-video:** if a `reference_image` is passed, `input` becomes an array `[image, text]`, so the model animates that exact person.
+- `findVideoContent()` searches `steps[] → content[]` for the video part. It handles two delivery styles: inline base64 `data`, or a `uri` that is downloaded **on the server** (so the API key never reaches the browser).
+- `GeminiVideoError` keeps Google's HTTP status (429, 404, …) so the route can respond correctly.
+- The duration is clamped to 3–15 seconds (the model's limits), and Google gets a **280-second** timeout, because videos are slow.
+- Google sometimes wraps errors in an **array**: `[{ "error": {...} }]`. The parser handles both shapes. This was found during testing: an invalid key first showed the useless message "Bad Request" instead of "API key not valid".
+
+**`app/api/gemini/video/route.ts`**
+- `export const maxDuration = 300;` lets the route run for up to 5 minutes on hosts like Vercel. (Locally there's no limit.)
+- It returns the **raw MP4 bytes** instead of JSON with base64 inside. Base64 is about 33% bigger, and video files are large.
+- The reference image arrives as a data URL (`data:image/png;base64,...`) and is split with a regex into `mime_type` and `data`.
+
+**Shared helper `isQuotaError()` in `lib/gemini.ts`**, used by both the image and video routes. It also matches the video API's new wording, `too_many_requests` / "Rate limit exceeded".
+
+### UI changes (`components/InteractiveInfluencerGenerator.tsx`)
+
+This component is used both on the landing page ("Generator Arena") and in **Dashboard → Models / Studio → Create a Post**, so both get video.
+
+| Part | What it does |
+|---|---|
+| **📸 Image / 🎬 Video** switch | Replaces the old fake badge; sets `mediaType` state |
+| **Video Length** (5s / 10s / 15s) | Only shown in video mode; longer takes more time |
+| Aspect ratio | In video mode **1:1 is hidden** (the model only supports 9:16 and 16:9); if 1:1 was selected, it switches to 9:16 |
+| Tip line | "Generate an image first, then switch to Video to animate it", or "✨ Your generated image will be animated" when a real image exists |
+| Button | "Generate Influencer Video"; while generating, "Videos can take 1-3 minutes" |
+| Progress bar | Moves slowly (1% every 1.5 s, stops at 92%) because videos take minutes, not seconds |
+| Preview | `<video autoPlay loop muted playsInline controls>` with the image as `poster` |
+| Download bar | "Format: MP4 · 10s · 9:16" + **Download Video ↓** |
+
+### Key concepts to study
+
+**1. Blob URLs: playing bytes in a `<video>` tag**
+
+```tsx
+const blob = await response.blob();               // MP4 bytes from our API
+setGeneratedVideoUrl(URL.createObjectURL(blob));  // → "blob:http://localhost:3000/abc-123"
+```
+
+`URL.createObjectURL` gives an in-memory file a temporary URL that `<video src>` and `<a download>` can use. It holds memory until it's released, so the component frees the old one whenever it changes:
+
+```tsx
+useEffect(() => {
+  return () => {                     // cleanup runs when the URL changes or the component unmounts
+    if (generatedVideoUrl) URL.revokeObjectURL(generatedVideoUrl);
+  };
+}, [generatedVideoUrl]);
+```
+
+**2. Why `muted` + `playsInline`?** Browsers only allow **autoplay** for muted videos. `playsInline` stops iPhones from forcing fullscreen.
+
+**3. Graceful fallback with `onError`.** If the video can't load (e.g. a stock clip returns 403), `onError` sets `videoLoadFailed`, and the still image is shown instead of a broken player.
+
+**4. One response, two possible types.** The route answers with **either** video bytes **or** JSON. The browser checks the `Content-Type` header to know which:
+
+```tsx
+if (response.ok && contentType.startsWith("video/")) { /* play it */ }
+else { const data = await response.json(); /* show the message */ }
+```
+
+**5. `useEffect` to keep state consistent.** Changing niche or style clears the old video, and entering video mode while 1:1 is selected switches to 9:16.
+
+### Testing
+
+| Test | Result |
+|---|---|
+| `POST /api/gemini/video` with the real key | **429** in 1.2 s: "no video-generation quota left…" (this also proves the `x-goog-api-key` header auth works) |
+| Missing prompt | **400** "Prompt is required…" |
+| Invalid key | **400** "API key not valid. Please pass a valid API key." |
+| Browser, real request | Switch to Video, choose 10s, Generate → message after 1.1 s, still image shown, no console errors |
+| Browser, **success path** (Google's answer replaced with a small test clip recorded by Playwright) | Video **plays** (`paused: false`), status shows **LIVE GEMINI API**, **Download Video** saves the file, no console errors |
+| TypeScript (`npx tsc --noEmit`) | No errors |
+
+⚠️ **Not yet tested:** a real video from Google, because the key has 0 quota. The request and response format comes from Google's Omni docs. Once billing is on, generate one 5-second video to confirm everything end-to-end.
+
+### To get real videos
+
+1. Enable **billing** for the key's project in Google AI Studio (aistudio.google.com).
+2. Check the price of `gemini-omni-1.2-flash` on Google's pricing page first. Video is much more expensive than images.
+3. Start with **5s** videos while testing.
+
+### Ideas for next features (after an image/video is created)
+
+1. **Save to Content Library**: add generated images/videos to `postsList`, so they appear under "Latest Generated Content" and the Content Library tab. Right now a generated post is lost when you leave the page.
+2. **AI caption + hashtags**: generate a platform-specific caption (Instagram vs TikTok vs YouTube) with a Gemini text model, which is far cheaper than image/video.
+3. **Schedule the post**: a "Schedule" button that sends the image/video plus caption to the Calendar tab with a date and time.
+4. **Persist to Supabase**: upload files to Supabase Storage and save post rows in the database, so posts survive a page reload.
+5. **Charge credits for video**: e.g. 50 for an image, 150 for a video, charged only when real media is generated.
+6. **Image-to-video from saved models**: an "Animate" button on a model card in the Personas Directory.

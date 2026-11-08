@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { submitGeminiGeneration, GeminiGenerationRequest } from "@/lib/gemini";
+import { submitGeminiGeneration, GeminiGenerationRequest, isQuotaError } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     // Quota / rate-limit errors are expected (e.g. free-tier keys have 0 image quota),
     // so answer with a short 429 instead of Google's long raw message as a 500
-    if (/quota|rate.?limit|RESOURCE_EXHAUSTED|\b429\b/i.test(message)) {
+    if (isQuotaError(message)) {
       console.warn("Gemini quota exceeded:", message.split("\n")[0]);
       return NextResponse.json(
         {
